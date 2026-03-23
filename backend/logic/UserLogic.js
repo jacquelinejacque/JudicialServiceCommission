@@ -11,61 +11,69 @@ import { where } from "sequelize";
 
 class UserLogic {
 
-    static create(body, callback) {
-        async.waterfall(
+static create(body, callback) {
+    async.waterfall(
         [
             function (done) {
-            if (Utils.isEmpty(body.name)) return done("Name cannot be empty");
-            if (Utils.isEmpty(body.phone)) return done("Phone number is required");
-            if (Utils.isEmpty(body.email)) return done("Email is required");
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(body.email)) return done("Please enter a valid email address");
+                if (Utils.isEmpty(body.name)) return done("Name cannot be empty");
+                if (Utils.isEmpty(body.phone)) return done("Phone number is required");
+                if (Utils.isEmpty(body.email)) return done("Email is required");
 
-            if (Utils.isEmpty(body.password)) return done("Password is required");
-                
-            DatabaseManager.user
-                .findOne({ where: { email: body.email } })
-                .then((res) => {
-                if (res) return done("User with similar details already exists");
-                done(null);
-                })
-                .catch((err) => done(err));
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(body.email)) return done("Please enter a valid email address");
+
+                if (Utils.isEmpty(body.password)) return done("Password is required");
+
+                const validTeams = ['JSC', 'eboard', 'tonerSupport', 'networkSupport', 'softwareSupport'];
+                if (body.team && !validTeams.includes(body.team)) {
+                    return done("Invalid team selected");
+                }
+
+                DatabaseManager.user
+                    .findOne({ where: { email: body.email } })
+                    .then((res) => {
+                        if (res) return done("User with similar details already exists");
+                        done(null);
+                    })
+                    .catch((err) => done(err));
             },
 
-            function (done) {    
-            const params = {
-                name: body.name,
-                phone: body.phone,
-                email: body.email,
-                password: bcrypt.hashSync(body.password, 8),
-                role: body.role || "normalUser",
-            };
+            function (done) {
+                const params = {
+                    name: body.name,
+                    phone: body.phone,
+                    email: body.email,
+                    password: bcrypt.hashSync(body.password, 8),
+                    role: body.role || "normalUser",
+                    team: body.team || "JSC",
+                };
 
-            DatabaseManager.user
-                .create(params)
-                .then((res) => done(null, res))
-                .catch((err) => done(err));
+                DatabaseManager.user
+                    .create(params)
+                    .then((res) => done(null, res))
+                    .catch((err) => done(err));
             },
         ],
         function (err, data) {
-        if (err)
+            if (err)
+                return callback({
+                    status: Consts.httpCodeServerError,
+                    message: "Failed to create user",
+                    error: err,
+                });
+
+            // Remove sensitive fields
+            const user = data.get({ plain: true });
+            delete user.password;
+        
             return callback({
-            status: Consts.httpCodeServerError,
-            message: "Failed to create user",
-            error: err,
+                status: Consts.httpCodeSuccess,
+                message: "User created successfully",
+                user: user,
             });
-
-        // Remove sensitive fields before sending response
-        if (data?.password) delete data.password;
-
-        return callback({
-            status: Consts.httpCodeSuccess,
-            message: "User created successfully",
-            user: data
-        });
         }
-        );
-    }
+    );
+}
 
     static login(body, callback) {
         async.waterfall(
@@ -76,7 +84,7 @@ class UserLogic {
                     
                     DatabaseManager.user
                         .findOne({
-                            attributes: ["userID", "name", "phone", "email", "password"],
+                            attributes: ["userID", "name", "phone", "email", "password", "role"],
                             where: { email: body.username }
                         })
                         .then((user) => {
@@ -104,6 +112,7 @@ class UserLogic {
                     const payload = {
                         session,
                         expiry,
+                        role: user.role,
                         name: user.name,
                         email: user.email,
                         userID: user.userID
@@ -137,6 +146,7 @@ class UserLogic {
                         userID: user.userID,
                         name: user.name,
                         phone: user.phone,
+                        role: user.role,
                         session: user.session,
                         email: user.email,
                         expiry: user.expiry
@@ -181,75 +191,81 @@ class UserLogic {
         );
     }
     static list(param, callback) {
-    const baseQuery = {}; // No restriction: fetch all users
-    let filteredQuery = { ...baseQuery };
+        const baseQuery = {}; // No restriction: fetch all users
+        let filteredQuery = { ...baseQuery };
+        if (!Utils.isEmpty(param.role)) {
+            filteredQuery.role = param.role;
+        }    
 
-    if (!Utils.isEmpty(param["search[value]"])) {
-        const searchValue = param["search[value]"];
-        filteredQuery = {
-        [Op.or]: [
-            { email: { [Op.like]: `%${searchValue}%` } },
-            { phone: { [Op.like]: `%${searchValue}%` } },
-            { name: { [Op.like]: `%${searchValue}%` } },
-            { status: { [Op.like]: `%${searchValue}%` } }, // allow search by status too
-        ],
-        };
-    }
+        if (!Utils.isEmpty(param["search[value]"])) {
+            const searchValue = param["search[value]"];
+            filteredQuery = {
+                ...filteredQuery,
+                [Op.or]: [
+                    { email: { [Op.like]: `%${searchValue}%` } },
+                    { phone: { [Op.like]: `%${searchValue}%` } },
+                    { name: { [Op.like]: `%${searchValue}%` } },
+                    { status: { [Op.like]: `%${searchValue}%` } }, // allow search by status too
+                    { role: { [Op.like]: `%${searchValue}%` } },
+                    { team: { [Op.like]: `%${searchValue}%` } }
+                ],
+            };
+        }
 
-    async.waterfall(
-        [
-        function (done) {
-            // Count ALL users regardless of search
-            DatabaseManager.user
-            .count({ where: baseQuery })
-            .then((totalRecords) => done(null, totalRecords))
-            .catch((err) => done(err));
-        },
-        function (totalRecords, done) {
-            // Count filtered users (if search applied)
-            DatabaseManager.user
-            .count({ where: filteredQuery })
-            .then((filteredRecords) => done(null, totalRecords, filteredRecords))
-            .catch((err) => done(err));
-        },
-        function (totalRecords, filteredRecords, done) {
-            const offset = parseInt(param.start) || 0;
-            const limit = parseInt(param.length) || 10;
+        async.waterfall(
+            [
+            function (done) {
+                // Count ALL users regardless of search
+                DatabaseManager.user
+                .count({ where: baseQuery })
+                .then((totalRecords) => done(null, totalRecords))
+                .catch((err) => done(err));
+            },
+            function (totalRecords, done) {
+                // Count filtered users (if search applied)
+                DatabaseManager.user
+                .count({ where: filteredQuery })
+                .then((filteredRecords) => done(null, totalRecords, filteredRecords))
+                .catch((err) => done(err));
+            },
+            function (totalRecords, filteredRecords, done) {
+                const offset = parseInt(param.start) || 0;
+                const limit = parseInt(param.length) || 10;
 
-            DatabaseManager.user
-            .findAll({
-                where: filteredQuery,
-                attributes: ["userID", "name", "phone", "email", "role", "status"],
-                order: [["createdAt", "DESC"]],
-                offset: offset,
-                limit: limit,
-            })
-            .then((data) => done(null, totalRecords, filteredRecords, data))
-            .catch((err) => done(err));
-        },
-        ],
-        function (err, totalRecords, filteredRecords, data) {
-        if (err) {
+                DatabaseManager.user
+                .findAll({
+                    where: filteredQuery,
+                    attributes: ["userID", "name", "phone", "email", "role", "status","team"],
+                    order: [["createdAt", "DESC"]],
+                    offset: offset,
+                    limit: limit,
+                })
+                .then((data) => done(null, totalRecords, filteredRecords, data))
+                .catch((err) => done(err));
+            },
+            ],
+            function (err, totalRecords, filteredRecords, data) {
+            if (err) {
+                return callback({
+                status: Consts.httpCodeServerError,
+                message: "Failed to fetch User Contacts",
+                error: err,
+                data: [],
+                recordsTotal: 0,
+                recordsFiltered: 0,
+                });
+            }
+
             return callback({
-            status: Consts.httpCodeServerError,
-            message: "Failed to fetch User Contacts",
-            error: err,
-            data: [],
-            recordsTotal: 0,
-            recordsFiltered: 0,
+                status: Consts.httpCodeSuccess,
+                message: "User Contacts fetched successfully",
+                data: data,
+                draw: parseInt(param.draw),
+                recordsTotal: totalRecords,
+                recordsFiltered: filteredRecords,
             });
-        }
-
-        return callback({
-            status: Consts.httpCodeSuccess,
-            message: "User Contacts fetched successfully",
-            data: data,
-            draw: parseInt(param.draw),
-            recordsTotal: totalRecords,
-            recordsFiltered: filteredRecords,
-        });
-        }
-    );
+            }
+        );
     }
 
     static update(body, callback) {

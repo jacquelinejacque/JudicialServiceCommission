@@ -4,8 +4,8 @@ import dotenv from 'dotenv';
 import User from '../models/Users.js';
 import DisciplinaryRecord from '../models/DisciplinaryRecords.js'
 import HelpDesk from '../models/HelpDesk.js'
-// import Invoice from '../models/Invoices.js'
-// import InvoiceItem from '../models/InvoiceItems.js';
+import TicketHistory from '../models/TicketHistory.js'
+import TicketNote from "../models/TicketNote.js";
 
 dotenv.config();
 
@@ -15,7 +15,8 @@ class DatabaseManager {
     this.user = null;
     this.disciplinaryRecord = null;
     this.helpdesk = null;
-    // this.service = null;
+    this.ticketHistory = null;
+    this.ticketNote = null;
     // this.invoice = null;
     // this.invoiceItem = null;
   }
@@ -55,6 +56,8 @@ class DatabaseManager {
       this.user = User.init(this.sequelize);
       this.disciplinaryRecord = DisciplinaryRecord.init(this.sequelize);
       this.helpdesk = HelpDesk.init(this.sequelize);
+      this.ticketHistory = TicketHistory.init(this.sequelize);
+      this.ticketNote = TicketNote.init(this.sequelize);
 
       this.createRelationships();
 
@@ -80,14 +83,14 @@ class DatabaseManager {
       this.user.hasMany(this.helpdesk, {
         as: "raisedTickets",
         foreignKey: { name: "userID", allowNull: false },
-        onDelete: "CASCADE",
+        onDelete: "RESTRICT",
         onUpdate: "CASCADE",
       });
 
       this.helpdesk.belongsTo(this.user, {
         as: "requester",
         foreignKey: { name: "userID", allowNull: false },
-        onDelete: "CASCADE",
+        onDelete: "RESTRICT",
         onUpdate: "CASCADE",
       });
 
@@ -95,7 +98,6 @@ class DatabaseManager {
       this.user.hasMany(this.helpdesk, {
         as: "assignedTickets",
         foreignKey: { name: "assignedTo", allowNull: true },
-        constraints: false, 
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
       });
@@ -103,18 +105,98 @@ class DatabaseManager {
       this.helpdesk.belongsTo(this.user, {
         as: "agent",
         foreignKey: { name: "assignedTo", allowNull: true },
-        constraints: false,
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
       });
 
+      // HelpDesk -> TicketHistory
+      this.helpdesk.hasMany(this.ticketHistory, {
+        as: "history",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.ticketHistory.belongsTo(this.helpdesk, {
+        as: "ticket",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      // User (Actor / Person who performed action) -> TicketHistory
+      this.user.hasMany(this.ticketHistory, {
+        as: "performedActions",
+        foreignKey: { name: "performedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.ticketHistory.belongsTo(this.user, {
+        as: "actor",
+        foreignKey: { name: "performedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      // Optional historical references
+      this.user.hasMany(this.ticketHistory, {
+        as: "fromUserHistory",
+        foreignKey: { name: "fromUserID", allowNull: true },
+        constraints: false,
+      });
+
+      this.ticketHistory.belongsTo(this.user, {
+        as: "fromUser",
+        foreignKey: { name: "fromUserID", allowNull: true },
+        constraints: false,
+      });
+
+      this.user.hasMany(this.ticketHistory, {
+        as: "toUserHistory",
+        foreignKey: { name: "toUserID", allowNull: true },
+        constraints: false,
+      });
+
+      this.ticketHistory.belongsTo(this.user, {
+        as: "toUser",
+        foreignKey: { name: "toUserID", allowNull: true },
+        constraints: false,
+      });
+
+      // HelpDesk -> TicketNote
+      this.helpdesk.hasMany(this.ticketNote, {
+        as: "notes",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.ticketNote.belongsTo(this.helpdesk, {
+        as: "ticket",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      // User -> TicketNote
+      this.user.hasMany(this.ticketNote, {
+        as: "ticketNotes",
+        foreignKey: { name: "createdBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.ticketNote.belongsTo(this.user, {
+        as: "author",
+        foreignKey: { name: "createdBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
     } catch (error) {
       console.error("Error in createRelationships method:", error);
     }
   }
-  
-
-
   
 }
 

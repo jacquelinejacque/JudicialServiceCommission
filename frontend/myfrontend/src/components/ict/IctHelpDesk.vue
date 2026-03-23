@@ -1,322 +1,323 @@
-
 <script>
 import DataTable from 'datatables.net-vue3'
-import { Const } from '../../utils/constants'
 import DataTableBs5 from 'datatables.net-bs5'
-import EditUserForm from './EditUserForm.vue'
+import { Const } from '../../utils/constants'
 import RaiseTicketForm from './RaiseTicketForm.vue'
-import ResetPasswordForm from './ResetPasswordForm.vue'
 import Toastify from 'toastify-js'
-import axios from 'axios'
-import { Modal } from 'bootstrap'
+import { Modal, Dropdown } from 'bootstrap'
+import AssignTicketForm from './AssignTicketForm.vue'
+
 DataTable.use(DataTableBs5)
 
 export default {
   components: {
     DataTable,
     RaiseTicketForm,
-    EditUserForm,
-    ResetPasswordForm
+    AssignTicketForm
   },
 
   data() {
     return {
-      selectedUserId: null,
-      selectedUser: null,
-      deleteFeedback: '',
-      restoreFeedback: '',
+      selectedTicket: null,
+      loading: false,
+      currentUser: JSON.parse(localStorage.getItem('user') || '{}'),      
+      reassignMode: false,      
+
       options: {
         responsive: true,
-        serverSide: true,
+        serverSide: false,
+        processing: true,
         select: true,
         bLengthChange: false,
-        bInfo: false,
+        bInfo: true,
         destroy: true,
         paging: true,
         searching: false,
         ordering: true,
         pageLength: 10,
-        loading: false,
         ajax: {
-          url: `${Const.BASE_URL}/users/list`,
-          type: 'get',
+          url: `${Const.BASE_URL}/helpDesk/list`,
+          type: 'GET',
           headers: {
             'access-token': localStorage.getItem('accessToken')
           },
-          error: function () {
-            console.log('Error loading data')
+          dataSrc: function (json) {
+            console.log('HelpDesk list response:', json)
+            return json?.tickets || []
+          },
+          error: function (xhr) {
+            console.log('Error loading tickets:', xhr?.responseText || xhr)
           }
         }
       },
 
       columns: [
         {
-          title: 'Name',
-          data: null,
-          render: (data, type, row) => {
-            return `${row.name}`
-          }
+          title: 'Ticket No',
+          data: 'ticketNumber',
+          defaultContent: '_'
         },
         {
-          title: 'Phone',
+          title: 'Requester',
           data: null,
-          render: (data, type, row) => {
-            return row.phone ? `${row.phone}` : 'null'
-          }
+          render: (data, type, row) => row.requester?.name || row.createdBy || '_'
         },
         {
           title: 'Email',
           data: null,
-          render: (data, type, row) => {
-            return row.email ? `${row.email}` : '_'
-          }
+          render: (data, type, row) => row.requester?.email || '_'
         },
         {
-          title: 'Role',
+          title: 'Phone',
           data: null,
-          render: (data, type, row) => {
-            return `${row.role}`
-          }
+          render: (data, type, row) => row.requester?.phone || '_'
         },
         {
-          title: 'status',
+          title: 'Issue Type',
+          data: 'issueType',
+          defaultContent: '_'
+        },
+        {
+          title: 'Title',
+          data: 'title',
+          defaultContent: '_'
+        },
+        {
+          title: 'Priority',
+          data: 'priority',
+          defaultContent: '_'
+        },
+        {
+          title: 'Status',
+          data: 'status',
+          defaultContent: '_'
+        },
+        {
+          title: 'Assigned To',
           data: null,
-          render: (data, type, row) => {
-            return `${row.status}`
+          render: (data, type, row) => row.agent?.name || '_'
+        },
+        {
+          title: 'Created At',
+          data: 'createdAt',
+          render: (data) => {
+            return data ? new Date(data).toLocaleString() : '_'
           }
         },
         {
+          title: 'Action',
           data: null,
           render: '#action',
-          title: 'Action'
+          orderable: false
         }
       ]
     }
   },
 
+  computed: {
+    isAdmin() {
+      return this.currentUser?.role === 'admin'
+    },
+    isAgent() {
+      return this.currentUser?.role === 'agent'
+    },
+    isNormalUser() {
+      return this.currentUser?.role === 'normalUser'
+    }
+  },
+
   mounted() {
     this.dt = this.$refs.table.dt
+
+    this.$nextTick(() => {
+      this.initDropdowns()
+    })
+
+    if (this.$refs.table?.dt) {
+      this.$refs.table.dt.on('draw', () => {
+        this.$nextTick(() => {
+          this.initDropdowns()
+        })
+      })
+    }
   },
 
   methods: {
-    async getUsers() {
-      this.dt = this.$refs.table.dt
-      this.dt.ajax.reload(null, false)
+    isAssignedAgent(ticket) {
+      return this.isAgent && ticket?.assignedTo === this.currentUser?.userID
     },
 
-    showToast(message, isDanger) {
+    isNewTicket(ticket) {
+      return ticket?.status === 'new'
+    },
+
+    isOpenTicket(ticket) {
+      return ticket?.status === 'open'
+    },
+
+    isResolvedTicket(ticket) {
+      return ticket?.status === 'resolved'
+    },
+
+    canViewTicket() {
+      return true
+    },
+
+    canAssignTicket(ticket) {
+      return this.isAdmin && this.isNewTicket(ticket)
+    },
+
+    canReassignTicket(ticket) {
+      return this.isAdmin && this.isOpenTicket(ticket)
+    },
+
+    canEscalateTicket(ticket) {
+      return this.isAdmin && this.isOpenTicket(ticket)
+    },
+
+    canAddNotes(ticket) {
+      return (this.isAdmin || this.isAssignedAgent(ticket)) && this.isOpenTicket(ticket)
+    },
+
+    canResolveTicket(ticket) {
+      return (this.isAdmin || this.isAssignedAgent(ticket)) && this.isOpenTicket(ticket)
+    },
+
+    canCloseTicket(ticket) {
+      return this.isAdmin && this.isResolvedTicket(ticket)
+    }, 
+
+    reloadTickets() {
+      if (this.$refs.table && this.$refs.table.dt) {
+        this.$refs.table.dt.ajax.reload(null, false)
+      } else {
+        console.error('DataTable reference is missing.')
+      }
+    },
+
+    showToast(message, isDanger = false) {
       Toastify({
         text: message,
-        // className: className,
         style: {
           background: isDanger ? '#d63939' : '#2fb344'
         }
       }).showToast()
     },
-    editUser(user) {
-      this.selectedUser = { ...user }
-      console.log(this.selectedUser)
-    },
-
-    setUserId(userId) {
-      this.selectedUserId = userId
-      console.log('Selected user Id:', this.selectedUserId)
-    },
 
     handleTicket() {
-      //console.log('ticket raised, closing modal and refreshing data...');
-      const modal = document.getElementById('raiseTicketModal');
+      const modal = document.getElementById('raiseTicketModal')
       if (modal) {
-        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
-        modalInstance.hide();
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal)
+        modalInstance.hide()
+
         modal.addEventListener(
           'hidden.bs.modal',
           () => {
-            document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-            document.body.classList.remove('modal-open'); 
+            document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
+            document.body.classList.remove('modal-open')
           },
           { once: true }
-        );
-      }
-      if (this.$refs.table && this.$refs.table.dt) {
-        this.$refs.table.dt.ajax.reload(null, false);
-      } else {
-        console.error('DataTable reference is missing.');
-      }
-    },
-
-    async deleteUser() {
-      this.loading = true
-      if (!this.selectedUserId) {
-        this.showToast('User ID is missing', true)
-        this.loading = false
-        return
-      }
-      try {
-        const res = await axios.post(
-          `${Const.BASE_URL}/users/delete`,
-          { userId: this.selectedUserId,
-            feedback: this.deleteFeedback
-           },
-          { headers: { 'access-token': localStorage.getItem('accessToken') } }
         )
-        console.log(res.data)
-        this.loading = false
-        if (res.data.status === 200) {
-          this.showToast('User successfully deleted', false)
-          const modal = document.getElementById('deleteUserModal')
-          if (modal) {
-            const modalInstance = Modal.getInstance(modal) || new Modal(modal)
-            modalInstance.hide()
+      }
 
-            modal.addEventListener(
-              'hidden.bs.modal',
-              () => {
-                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
-                document.body.classList.remove('modal-open')
-              },
-              { once: true }
-            )
-          }
-          this.getUsers()
-        } else {
-          const message = res.data.message || 'oops, something went wrong!'
-          this.showToast(message, true)
-        }
-      } catch (error) {
-        console.error('Error deleting the user:', error)
-        this.showToast('Failed to delete user, please try again', true)
-      } finally {
-        this.loading = false
-      }
-    },
-    async restoreUser() {
-      this.loading = true
-      if (!this.selectedUserId) {
-        this.showToast('User ID is missing', true)
-        this.loading = false
-        return
-      }
-      try {
-        const res = await axios.post(
-          `${Const.BASE_URL}/users/reactivate`,
-          { userId: this.selectedUserId,
-            feedback: this.restoreFeedback
-           },
-          { headers: { 'access-token': localStorage.getItem('accessToken') } }
-        )
-        console.log(res.data)
-        this.loading = false
-        if (res.data.status === 200) {
-          this.showToast('User successfully restored', false)
-          const modal = document.getElementById('restoreUserModal')
-          if (modal) {
-            const modalInstance = Modal.getInstance(modal) || new Modal(modal)
-            modalInstance.hide()
-
-            modal.addEventListener(
-              'hidden.bs.modal',
-              () => {
-                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
-                document.body.classList.remove('modal-open')
-              },
-              { once: true }
-            )
-          }
-          this.getUsers()
-        } else {
-          const message = res.data.message || 'oops, something went wrong!'
-          this.showToast(message, true)
-        }
-      } catch (error) {
-        console.error('Error restoring the user:', error)
-        this.showToast('Failed to restore user, please try again', true)
-      } finally {
-        this.loading = false
-      }
-    },
-    async resetPassword() {
-      this.loading = true
-      if (!this.selectedUserId) {
-        this.showToast('User ID is missing', true)
-        this.loading = false
-        return
-      }
-      try {
-        const res = await axios.post(
-          `${Const.BASE_URL}user/password/reset`,
-          { selectedUserId: this.selectedUserId },
-          { headers: { 'access-token': localStorage.getItem('accessToken') } }
-        )
-        this.loading = false
-        if (res.data.status === 10001) {
-          this.showToast('A new passsword has been sent to you via email', false)
-          const modal = document.getElementById('updatePasswordModal')
-          if (modal) {
-            const modalInstance = Modal.getInstance(modal) || new Modal(modal)
-            modalInstance.hide()
-
-            modal.addEventListener(
-              'hidden.bs.modal',
-              () => {
-                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
-                document.body.classList.remove('modal-open')
-              },
-              { once: true }
-            )
-          }
-          this.getUsers()
-        } else {
-          const message = res.data.message || 'An error occred please try again later'
-          this.showToast(message, true)
-        }
-      } catch (error) {
-        console.error('Error occured while processing the request:', error)
-        this.showToast('Failed to sent an email to user, please try again', true)
-      } finally {
-        this.loading = false
-      }
+      this.reloadTickets()
+      this.showToast('Ticket raised successfully')
     },
 
-    handleUserEditing() {
-      //console.log('User added, closing modal and refreshing data...');
-      const modal = document.getElementById('editUserModal');
+    initDropdowns() {
+      document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((el) => {
+        if (!el._dropdownInstance) {
+          el._dropdownInstance = new Dropdown(el)
+        }
+      })
+    },
+
+    viewTicket(ticket) {
+      this.$router.push({
+        name: 'ict-help-desk-view',
+        params: { ticketID: ticket.ticketID }
+      })
+    },
+
+    assignTicket(ticket) {
+      this.selectedTicket = ticket
+      this.reassignMode = false
+      this.showAssignModal()
+    },
+
+    reassignTicket(ticket) {
+      this.selectedTicket = ticket
+      this.reassignMode = true
+      this.showAssignModal()
+    },
+
+    showAssignModal() {
+      this.$nextTick(() => {
+        const modalEl = document.getElementById('assignTicketModal')
+        if (modalEl) {
+          const modalInstance = Modal.getInstance(modalEl) || new Modal(modalEl)
+          modalInstance.show()
+        }
+      })
+    },
+
+    handleTicketAssigning() {
+      const modal = document.getElementById('assignTicketModal')
       if (modal) {
-        const modalInstance = Modal.getInstance(modal) || new Modal(modal);
-        modalInstance.hide();
+        const modalInstance = Modal.getInstance(modal) || new Modal(modal)
+        modalInstance.hide()
         modal.addEventListener(
           'hidden.bs.modal',
           () => {
-            document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-            document.body.classList.remove('modal-open'); 
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+            document.body.classList.remove('modal-open')
           },
           { once: true }
-        );
+        )
       }
-      if (this.$refs.table && this.$refs.table.dt) {
-        this.$refs.table.dt.ajax.reload(null, false);
-      } else {
-        console.error('DataTable reference is missing.');
-      }
-    },
-  
 
+      this.selectedTicket = null
+      this.reassignMode = false
+      this.reloadTickets()
+      this.showToast(this.reassignMode ? 'Ticket reassigned successfully' : 'Ticket assigned successfully')
+    },
+
+
+    escalateTicket(ticket) {
+      console.log('Escalate ticket', ticket)
+      this.$emit('escalate-ticket', ticket)
+    },
+
+    addNotes(ticket) {
+      console.log('Add notes', ticket)
+      this.$emit('add-notes', ticket)
+    },
+
+    resolveTicket(ticket) {
+      console.log('Resolve ticket', ticket)
+      this.$emit('resolve-ticket', ticket)
+    },
+
+    closeTicket(ticket) {
+      console.log('Close ticket', ticket)
+      this.$emit('close-ticket', ticket)
+    },
+ 
   },
+
   props: []
 }
 </script>
 
 <template>
   <div class="container-xxl py-3">
-
-    <!-- Card -->
     <div class="card shadow-sm">
-
-      <!-- Card header -->
       <div class="card-header d-flex align-items-center justify-content-between">
         <div>
-          <h5 class="card-title mb-0">System Users</h5>
-          <small class="text-muted">Manage users, roles and status</small>
+          <h5 class="card-title mb-0">ICT Help Desk Requests</h5>
+          <small class="text-muted">
+            Admins see all tickets. Other users see tickets they created or tickets assigned to them.
+          </small>
         </div>
 
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#raiseTicketModal">
@@ -324,9 +325,8 @@ export default {
         </button>
       </div>
 
-      <!-- Card body -->
-      <div class="card-body p-0">
-        <div class="table-responsive">
+      <div class="card-body p-0 overflow-visible">
+        <div class="table-responsive overflow-visible">
           <DataTable
             ref="table"
             :columns="columns"
@@ -334,58 +334,95 @@ export default {
             width="100%"
             class="table table-hover table-striped mb-0"
           >
-            <template #action="props">
-              <div class="d-flex gap-3 align-items-center">
-                <a
-                  href="#"
-                  class="text-primary"
-                  data-bs-toggle="modal"
-                  data-bs-target="#editUserModal"
-                  @click.prevent="editUser(props.rowData)"
-                >
-                  Edit
-                </a>
+          <template #action="props">
+            <div class="dropdown position-relative">
+              <button
+                class="btn btn-sm btn-outline-primary dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                Actions
+              </button>
 
-                <a
-                  href="#"
-                  class="text-danger"
-                  data-bs-toggle="modal"
-                  data-bs-target="#resetPasswordModal"
-                  @click.prevent="setUserId(props.rowData.userID)"
-                >
-                  Reset Password
-                </a>
+              <ul class="dropdown-menu dropdown-menu-end shadow">
+                <li v-if="canViewTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="viewTicket(props.rowData)"
+                  >
+                    View Ticket
+                  </a>
+                </li>
 
-                <a
-                  v-if="props.rowData.status === 'active'"
-                  href="#"
-                  class="text-muted"
-                  data-bs-toggle="modal"
-                  data-bs-target="#deleteUserModal"
-                  @click.prevent="setUserId(props.rowData.userID)"
-                >
-                  <span class="btn-close" aria-label="Delete"></span>
-                </a>
+                <li v-if="canAssignTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="assignTicket(props.rowData)"
+                  >
+                    Assign Ticket
+                  </a>
+                </li>
 
-                <a
-                  v-if="props.rowData.status === 'inactive'"
-                  href="#"
-                  class="text-success"
-                  data-bs-toggle="modal"
-                  data-bs-target="#restoreUserModal"
-                  @click.prevent="setUserId(props.rowData.userID)"
-                >
-                  Restore
-                </a>
-              </div>
-            </template>
+                <li v-if="canReassignTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="reassignTicket(props.rowData)"
+                  >
+                    Reassign Ticket
+                  </a>
+                </li>
+
+                <li v-if="canEscalateTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="escalateTicket(props.rowData)"
+                  >
+                    Escalate Ticket
+                  </a>
+                </li>
+
+                <li v-if="canAddNotes(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="addNotes(props.rowData)"
+                  >
+                    Add Notes
+                  </a>
+                </li>
+
+                <li v-if="canResolveTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="resolveTicket(props.rowData)"
+                  >
+                    Resolve Ticket
+                  </a>
+                </li>
+
+                <li v-if="canCloseTicket(props.rowData)">
+                  <a
+                    class="dropdown-item"
+                    href="#"
+                    @click.prevent="closeTicket(props.rowData)"
+                  >
+                    Close Ticket
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </template>
           </DataTable>
         </div>
       </div>
-
     </div>
 
-    <!-- Raise Ticket modal -->
     <div
       class="modal modal-blur fade"
       id="raiseTicketModal"
@@ -397,102 +434,25 @@ export default {
         <RaiseTicketForm @ticket-Raised="handleTicket" />
       </div>
     </div>
-
-    <!-- Edit user modal -->
-    <div
-      class="modal fade"
-      id="editUserModal"
-      tabindex="-1"
-      aria-labelledby="editUser"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <EditUserForm v-if="selectedUser" :user="selectedUser" @user-Edited="handleUserEditing" />
-      </div>
-    </div>
-
-    <!-- delete user modal -->
-    <div
-      class="modal fade"
-      id="deleteUserModal"
-      tabindex="-1"
-      aria-labelledby="deleteUserModalLabel"
-      aria-hidden="true"
-      data-bs-backdrop="static"
-      data-bs-keyboard="false"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-md">
-        <div class="modal-content">
-          <div class="modal-body d-flex align-items-start justify-content-between">
-            <div>
-              <h5 class="modal-title mb-1">Delete User</h5>
-              <div class="text-muted">Are you sure you want to delete this user?</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
-            <button type="submit" class="btn btn-primary" @click="deleteUser" :disabled="loading">
-              <span v-if="loading">removing...</span>
-              <span v-else>Yes</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- restore user modal -->
-    <div
-      class="modal fade"
-      id="restoreUserModal"
-      tabindex="-1"
-      aria-labelledby="restoreUserModalLabel"
-      aria-hidden="true"
-      data-bs-backdrop="static"
-      data-bs-keyboard="false"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-md">
-        <div class="modal-content">
-          <div class="modal-body d-flex align-items-start justify-content-between">
-            <div>
-              <h5 class="modal-title mb-1">Restore User</h5>
-              <div class="text-muted">Are you sure you want to restore this user?</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
-            <button type="submit" class="btn btn-primary" @click="restoreUser" :disabled="loading">
-              <span v-if="loading">restoring...</span>
-              <span v-else>Yes</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Password Reset modal -->
-    <div
-      class="modal fade"
-      id="resetPasswordModal"
-      tabindex="-1"
-      aria-labelledby="resetPassword"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <ResetPasswordForm :userId="selectedUserId" />
-      </div>
-    </div>
-
   </div>
-</template>
 
-<style>
-.button-container {
-  display: flex;
-  flex-direction: row;
-  gap: 2em;
-}
-</style>
+      <!-- Assign Ticket modal -->
+      <div
+        class="modal fade"
+        id="assignTicketModal"
+        tabindex="-1"
+        aria-labelledby="assignTicket"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <AssignTicketForm
+            v-if="selectedTicket"
+            :ticket="selectedTicket"
+            :mode="reassignMode ? 'reassign' : 'assign'"
+            @ticket-Assigned="handleTicketAssigning"
+          />
+        </div>
+      </div>
+   
+
+</template>

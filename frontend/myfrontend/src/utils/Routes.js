@@ -5,6 +5,7 @@ import MainComponent from '@/components/MainComponent.vue'
 // import InvoiceList from '@/components/invoice/InvoiceList.vue'
 // import NewInvoice from '@/components/invoice/NewInvoice.vue'
 import IctHelpDesk from '@/components/ict/IctHelpDesk.vue'
+import ViewTicket from '@/components/ict/ViewTicket.vue'
 import Users from '@/components/users/Users.vue'
 import DisciplinaryRecords from '@/components/disciplinaryRecords/DisciplinaryRecords.vue'
 
@@ -56,37 +57,15 @@ export const routes = [
         meta: {
           requiresAuth: true
         }
-      },       
-    //   {
-    //     path: 'invoices/list-invoice',
-    //     name: 'invoice',
-    //     component:InvoiceList,
-    //     meta: {
-    //       requiresAuth: true
-    //     }
-    //   },
-    //   {
-    //     path: 'invoices/new-invoice',
-    //     name: 'NewInvoice',
-    //     component:NewInvoice,
-    //     meta: {
-    //       requiresAuth: true
-    //     }
-    //   },    
-    //   {
-    //     path: 'invoices/details/:invoiceId',
-    //     name: 'invoice-details',
-    //     component: InvoiceDetails,
-    //     meta: { requiresAuth: true }
-    //   },                  
-    //   {
-    //     path: 'records/payment',
-    //     name: 'payment',
-    //     component:PaymentList,
-    //     meta: {
-    //       requiresAuth: true
-    //     }
-    //   },   
+      },  
+      {
+      path: 'ict/help-desk/:ticketID',
+      name: 'ict-help-desk-view',
+      component: ViewTicket,
+        meta: {
+          requiresAuth: true
+        }
+      }, 
       
     ]
   },

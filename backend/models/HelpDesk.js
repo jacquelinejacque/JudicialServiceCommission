@@ -42,9 +42,8 @@ class HelpDesk {
 
       priority: {
         type: DataTypes.ENUM,
-        allowNull: false,
+        allowNull: true,
         values: ['low', 'medium', 'high', 'urgent'],
-        defaultValue: 'medium'
       },
 
       status: {
@@ -65,7 +64,10 @@ class HelpDesk {
       attachments: {
         type: DataTypes.STRING,
       },
-
+      reassignmentReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       createdBy: {
         type: DataTypes.STRING,
       },
@@ -78,7 +80,39 @@ class HelpDesk {
       updatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
-      }
+      },
+      escalatedToTeam: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+
+      escalatedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+
+      escalationReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
+      escalatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: DataTypes.NOW,
+      },
+
+      slaTargetAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+
+      slaStatus: {
+        type: DataTypes.ENUM,
+        allowNull: true,
+        values: ["active", "breached", "met"],
+        defaultValue: "active",
+      },
 
     });
   }

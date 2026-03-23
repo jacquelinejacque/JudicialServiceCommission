@@ -30,23 +30,28 @@ export default {
     async handleSubmit() {
       try {
         this.loading = true;
+
         const res = await axios.post(`${Const.BASE_URL}/users/login`, this.formData);
 
         console.log(res.data);
 
-        // Adjust the condition to match your backend's success status
-        if (res.data?.status !== 200) throw new Error(res.data.error || 'Unexpected error');
+        if (res.data?.status !== 200) {
+          throw new Error(res.data.error || 'Unexpected error');
+        }
 
         const accessToken = res.data.jwtToken;
-        const userID = res.data?.user?.userID;
-       
-        console.log('Access Token:', accessToken);
-        console.log('User ID:', userID);
-        
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('userID', userID);
+        const user = res.data.user;
 
+        console.log('Access Token:', accessToken);
+        console.log('User Object:', user);
+
+        // Save to localStorage
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        // Redirect
         this.$router.push('/records/users/list-users');
+
       } catch (error) {
         console.error(error);
         this.showToastMessage('Invalid Credentials');

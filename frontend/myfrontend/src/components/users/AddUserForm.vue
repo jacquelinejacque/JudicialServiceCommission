@@ -151,7 +151,8 @@ export default {
                 <select v-model="formData.role" class="form-control">
                 <option value="">Select Role</option>
                 <option value="admin">Admin</option>
-                <option value="client">Client</option>
+                <option value="agent">Agent</option>
+                <option value="normalUser">Normal User</option>
                 </select>
            
             </div>

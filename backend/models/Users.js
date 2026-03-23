@@ -25,9 +25,15 @@ class User {
       role: {
         type: DataTypes.ENUM,
         allowNull: false,
-        values: ['admin', 'normalUser', 'assignee'],
+        values: ['admin', 'normalUser', 'agent'],
         defaultValue: 'normalUser'
-      },      
+      },   
+      team: {
+        type: DataTypes.ENUM,
+        allowNull: false,
+        values: ['JSC', 'eboard', 'tonerSupport', 'networkSupport', 'softwareSupport'],
+        defaultValue: 'JSC'
+      },   
       session: {
         type: DataTypes.STRING,
       },      

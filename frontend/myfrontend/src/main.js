@@ -1,5 +1,7 @@
 // import './assets/css/tabler.min.css'
 // import './assets/css/demo.min.css'
+import 'bootstrap/dist/css/bootstrap.min.css'
+import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import '@tabler/core/dist/css/tabler.min.css' 
 import 'bootstrap/dist/js/bootstrap.bundle.js'
 import "toastify-js/src/toastify.css"

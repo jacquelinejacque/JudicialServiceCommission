@@ -15,6 +15,7 @@ app.use(cors({
   origin: 'http://localhost:8080', 
   credentials: true 
 }));
+app.use("/uploads", express.static("uploads"));
 
 var httpServer = createServer(app);
 httpServer.listen(process.env["PORT"] || 4600, function () {

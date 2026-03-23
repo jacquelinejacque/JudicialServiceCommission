@@ -2,43 +2,19 @@
 import { Const } from '@/utils/constants'
 import axios from 'axios'
 import Toastify from 'toastify-js'
-//import { Toast } from 'bootstrap/dist/js/bootstrap.bundle'
-import { formatPhoneNumber } from '@/utils/helpers'
 
 export default {
   data() {
     return {
       formData: {
         issueType: '',
-        issueCategory: '',
-        issueSummary: '',
-        copyissueTo: '',
-        attachFile: '',
+        title: '',
+        description: '',
+        priority: ''
       },
-      loading: false,
-      formSubmitted: false,
-      toastElement: null
+      loading: false
     }
   },
-  computed: {
-  formattedPhoneNumber: {
-    get() {
-      return formatPhoneNumber(this.formData.phone);
-    },
-    set(value) {
-      this.formData.phone = value;
-    }
-  }
-},
-
-  watch: {
-  'formData.phone': function (newVal) {
-    if (newVal) {
-      this.formData.phone = formatPhoneNumber(newVal);
-    }
-  }
-},
-
 
   methods: {
     showToast(message, isDanger) {
@@ -49,55 +25,59 @@ export default {
         }
       }).showToast()
     },
+
     async handleSubmit() {
       try {
-        if (!this.formData.name || !this.formData.phone || !this.formData.email || !this.formData.password || !this.formData.role) {
-        this.showToast('Please fill all required fields.', true)
-        return
+        if (!this.formData.issueType || !this.formData.title || !this.formData.description) {
+          this.showToast('Issue type, title, and description are required.', true)
+          return
         }
 
         this.loading = true
+
         const submitData = {
-            name: this.formData.name,
-            phone: this.formData.phone,
-            email: this.formData.email,
-            password: this.formData.password,
-            role: this.formData.role
+          issueType: this.formData.issueType,
+          title: this.formData.title,
+          description: this.formData.description,
+          priority: this.formData.priority || null
         }
 
-        console.log('Submitting data:', submitData)
+        console.log('Submitting ticket data:', submitData)
 
-        const res = await axios.post(`${Const.BASE_URL}/users/create`, submitData, {
-          headers: { 'access-token': localStorage.getItem('accessToken') }
-        })
-        console.log(res.data)
+        const res = await axios.post(
+          `${Const.BASE_URL}/helpDesk/raiseTicket`,
+          submitData,
+          {
+            headers: {
+              'access-token': localStorage.getItem('accessToken')
+            }
+          }
+        )
+
         if (res.data?.status === 200) {
-          this.showToast('User successfully created', false)
-          this.$emit('user-Added');
+          this.showToast('Ticket raised successfully', false)
+          this.$emit('ticket-raised', res.data.ticket)
+          this.resetForm()
         } else {
-          const message = res.data.message || 'Failed to create user'
+          const message = res.data?.message || 'Failed to raise ticket'
           this.showToast(message, true)
         }
       } catch (error) {
         console.error('Error:', error.response?.data || error.message)
-        const message = error.response?.data?.message || 'Failed to create user, please try again'
+        const message = error.response?.data?.message || 'Failed to raise ticket, please try again'
         this.showToast(message, true)
       } finally {
         this.loading = false
       }
     },
 
-
     resetForm() {
       this.formData = {
-        name: '',
-        phone: '',
-        email: '',
-        password: '',
-        role: '',
+        issueType: '',
+        title: '',
+        description: '',
+        priority: ''
       }
-
-      this.formSubmitted = true
     }
   }
 }
@@ -105,11 +85,10 @@ export default {
 
 <template>
   <div>
-  
     <form @submit.prevent="handleSubmit">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">New User</h5>
+          <h5 class="modal-title">Raise Ticket</h5>
           <button
             type="button"
             class="btn-close"
@@ -117,52 +96,56 @@ export default {
             aria-label="Close"
           ></button>
         </div>
+
         <div class="modal-body">
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label for="name" class="form-label">Name</label>
-              <input type="text" class="form-control" id="name" v-model="formData.name"  />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label for="phone" class="form-label">phone</label>
-              <input
-                type="tel"
-                class="form-control"
-                id="phone"
-                v-model="formData.phone"                
-              />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label for="email" class="form-label">email</label>
-              <input
-                type="email"
-                class="form-control"
-                id="email"
-                v-model="formData.email"                
-              />
-            </div>
-            <div class="col-md-6 mb-3">
-            <label for="password" class="form-label">Password</label>
-            <input type="password" class="form-control" id="password" v-model="formData.password"  />
+              <label for="issueType" class="form-label">Issue Type</label>
+              <select id="issueType" class="form-control" v-model="formData.issueType">
+                <option value="">Select Issue Type</option>
+                <option value="technical">Technical</option>
+                <option value="billing">Billing</option>
+                <option value="general">General</option>
+              </select>
             </div>
 
             <div class="col-md-6 mb-3">
-            <label class="form-label text-weight-1000">Select Role</label>
-                <select v-model="formData.role" class="form-control">
-                <option value="">Select Role</option>
-                <option value="admin">Admin</option>
-                <option value="client">Client</option>
-                </select>
-           
+              <label for="priority" class="form-label">Priority</label>
+              <select id="priority" class="form-control" v-model="formData.priority">
+                <option value="">Select Priority</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
             </div>
 
+            <div class="col-md-12 mb-3">
+              <label for="title" class="form-label">Issue Title</label>
+              <input
+                type="text"
+                class="form-control"
+                id="title"
+                v-model="formData.title"
+              />
+            </div>
+
+            <div class="col-md-12 mb-3">
+              <label for="description" class="form-label">Description</label>
+              <textarea
+                class="form-control"
+                id="description"
+                rows="4"
+                v-model="formData.description"
+              ></textarea>
+            </div>
           </div>
         </div>
+
         <div class="modal-footer">
           <button type="button" class="btn me-auto" data-bs-dismiss="modal">Close</button>
           <button type="submit" class="btn btn-primary" :disabled="loading">
             <span v-if="loading">Submitting...</span>
-            <span v-if="!loading">Submit</span>
+            <span v-else>Submit</span>
           </button>
         </div>
       </div>
