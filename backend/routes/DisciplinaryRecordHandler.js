@@ -15,13 +15,17 @@ DisciplinaryRecordHandler.get("/list",authenticate, function (req, res) {
   });
 });
 // create a record
-DisciplinaryRecordHandler.post("/create", function (req, res) {
- 
-  DisciplinaryRecordLogic.create(req.body, function (result) {
+DisciplinaryRecordHandler.post("/create", authenticate, function (req, res) {
+  const authUser = req.user; // get logged-in user from auth middleware
+
+  if (!authUser || !authUser.userID) {
+    return res.status(401).json({ status: 401, message: "Unauthorized" });
+  }
+
+  DisciplinaryRecordLogic.create(req.body, authUser, function (result) {
     res.json(result);
   });
 });
-
 //update a record
 DisciplinaryRecordHandler.post("/update",authenticate, function (req, res) {
   DisciplinaryRecordLogic.update(req.body, function (result) {
@@ -42,4 +46,12 @@ DisciplinaryRecordHandler.get("/download/:recordID", authenticate, function (req
   });
 });
 
+DisciplinaryRecordHandler.post("/update-action", authenticate, function (req, res) {
+  const { recordID, action, payload } = req.body;
+  DisciplinaryRecordLogic.updateCaseAction(req.user,recordID,action,payload || {}, 
+    function (result) {res.status(result.status || 200).json(result);
+    }
+  );
+
+});
 export default DisciplinaryRecordHandler;

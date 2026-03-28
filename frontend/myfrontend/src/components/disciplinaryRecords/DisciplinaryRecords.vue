@@ -23,9 +23,18 @@ export default {
       selectedRecord: null,
       deleteFeedback: '',
       restoreFeedback: '',
-      options: {
+      actionModal: null,
+      selectedAction: null,
+      actionPayload: {
+        hearingDate: '',
+        judgement: '',
+        reason: '',
+        note: ''
+      },
+        options: {
         responsive: true,
-        serverSide: true,
+        serverSide: false,
+        processing: true,
         select: true,
         bLengthChange: false,
         bInfo: false,
@@ -35,6 +44,7 @@ export default {
         ordering: true,
         pageLength: 10,
         loading: false,
+        order: [[6, 'asc']],
         ajax: {
           url: `${Const.BASE_URL}/disciplinaryRecords/list`,
           type: 'get',
@@ -47,16 +57,16 @@ export default {
         }
       },
         columns: [
+        { title: 'PJ Number', data: 'pjNumber' },
         { title: 'Officer Name', data: 'officerName' },
+        { title: 'File Number', data: 'fileNumber' },
         { title: 'Designation', data: 'designation' },
-        {
-            title: 'Date Filed',
-            data: 'dateFiled',
-            render: (data) => (data ? new Date(data).toLocaleDateString() : '_')
-        },
         { title: 'Nature Of Charges', data: 'natureOfCharges' },
+        { title: 'Date Escalated', data: 'dateEscalated', render: (data) => (data ? new Date(data).toLocaleDateString() : '_')  },
+        { title: 'Date Filed', data: 'dateFiled', render: (data) => (data ? new Date(data).toLocaleDateString() : '_') },
         { title: 'Panel', data: 'panel' },
-        { title: 'Decision', data: 'decision', render: (data) => (data ? data : '_') },
+        { title: 'Assigned To', data: 'assignedTo' },
+        { title: 'Judgement', data: 'judgement' },
         { title: 'Status', data: 'status' },
         { title: 'Action', data: null, render: '#action' }
         ]
@@ -66,7 +76,13 @@ export default {
   mounted() {
     this.dt = this.$refs.table.dt
   },
-
+  computed: {
+    formattedAction() {
+      return this.selectedAction
+        ? this.selectedAction.replaceAll('_', ' ')
+        : ''
+    }
+  },
   methods: {
     async getRecords() {
       this.dt = this.$refs.table.dt
@@ -182,22 +198,83 @@ export default {
       }
     },
   
+    openActionModal(record, action) {
+      this.selectedRecord = record
+      this.selectedRecordId = record.recordID
+      this.selectedAction = action
 
+      // reset payload
+      this.actionPayload = {
+        hearingDate: '',
+        judgement: ''
+      }
+
+      const modal = new Modal(document.getElementById('actionModal'))
+      modal.show()
+    },
+    async submitAction() {
+      try {
+        let payloadToSend = {}
+
+        // Only send payload when needed
+        if (this.selectedAction === 'ADD_HEARING_DATE') {
+          payloadToSend.hearingDate = this.actionPayload.hearingDate
+        }
+        if (this.selectedAction === 'ADJOURN_CASE') {
+          payloadToSend.reason = this.actionPayload.reason
+        }
+        if (this.selectedAction === 'JUDGMENT_RESERVED') {
+          payloadToSend.note = this.actionPayload.note
+        }       
+        if (this.selectedAction === 'ADD_JUDGEMENT') {
+          payloadToSend.judgement = this.actionPayload.judgement
+        }
+
+        const res = await axios.post(
+          `${Const.BASE_URL}/disciplinaryRecords/update-action`,
+          {
+            recordID: this.selectedRecordId,
+            action: this.selectedAction,
+            payload: payloadToSend
+          },
+          {
+            headers: {
+              'access-token': localStorage.getItem('accessToken')
+            }
+          }
+        )
+
+        if (res.data.status === 200) {
+          this.showToast("Action successful", false)
+
+          const modalEl = document.getElementById('actionModal')
+          const modal = Modal.getInstance(modalEl)
+          modal.hide()
+
+          this.getRecords()
+        } else {
+          this.showToast(res.data.message, true)
+        }
+      } catch (err) {
+        console.error(err)
+        this.showToast("Action failed", true)
+      }
+    }  
   },
   props: []
 }
 </script>
 
 <template>
-  <div class="container-xxl py-3">
+  <div class="container-xxl py-4">
 
     <!-- Card -->
     <div class="card shadow-sm">
 
       <!-- Card header -->
-      <div class="card-header d-flex align-items-center justify-content-between">
-        <div>
-          <h5 class="card-title mb-0">Disciplinary Records</h5>
+      <div class="card-header d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+        <div class="d-flex flex-column">
+          <h5 class="card-title mb-1">Disciplinary Records</h5>
           <small class="text-muted">Manage Records, roles and status</small>
         </div>
 
@@ -207,29 +284,98 @@ export default {
       </div>
 
       <!-- Card body -->
-      <div class="card-body p-0">
+      <div class="card-body p-3">
         <div class="table-responsive">
           <DataTable
             ref="table"
             :columns="columns"
             :options="options"
             width="100%"
-            class="table table-hover table-striped mb-0"
+            class="table table-hover table-striped table-sm mb-0"
           >
-            <template #action="props">
-              <div class="d-flex gap-3 align-items-center">
+
+          <template #action="props">
+            <div class="dropdown position-relative">
+              <button
+                class="btn btn-sm btn-outline-primary dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                Actions
+              </button>
+
+            <ul class="dropdown-menu dropdown-menu-end shadow">
+
+              <!-- Edit -->
+              <li>
                 <a
                   href="#"
-                  class="text-primary"
+                  class="dropdown-item text-primary"
                   data-bs-toggle="modal"
                   data-bs-target="#editRecordModal"
                   @click.prevent="editRecord(props.rowData)"
                 >
                   Edit
-                </a>           
+                </a>
+              </li>
 
-              </div>
-            </template>
+              <!-- Add Hearing Date -->
+              <li v-if="props.rowData.status === 'Filed' || props.rowData.status === 'Adjourned' ">
+                <a
+                  href="#"
+                  class="dropdown-item"
+                  @click.prevent="openActionModal(props.rowData, 'ADD_HEARING_DATE')"
+                >
+                  Add Hearing Date
+                </a>
+              </li>
+
+              <!-- Hearing Actions -->
+              <li v-if="props.rowData.status === 'Hearing'">
+                <a
+                  href="#"
+                  class="dropdown-item"
+                  @click.prevent="openActionModal(props.rowData, 'ADJOURN_CASE')"
+                >
+                  Adjourn Case
+                </a>
+              </li>
+
+              <li v-if="props.rowData.status === 'Hearing'">
+                <a
+                  href="#"
+                  class="dropdown-item"
+                  @click.prevent="openActionModal(props.rowData, 'JUDGMENT_RESERVED')"
+                >
+                  Reserve Judgement
+                </a>
+              </li>
+
+              <li v-if="props.rowData.status === 'Hearing' || props.rowData.status === 'Judgment Reserved'">
+                <a
+                  href="#"
+                  class="dropdown-item"
+                  @click.prevent="openActionModal(props.rowData, 'ADD_JUDGEMENT')"
+                >
+                  Deliver Judgement
+                </a>
+              </li>
+
+              <!-- Close Case -->
+              <li v-if="props.rowData.status === 'Judgment Delivered'">
+                <a
+                  href="#"
+                  class="dropdown-item text-danger"
+                  @click.prevent="openActionModal(props.rowData, 'CLOSE_CASE')"
+                >
+                  Close Case
+                </a>
+              </li>
+
+            </ul>
+            </div>
+          </template>            
           </DataTable>
         </div>
       </div>
@@ -262,80 +408,76 @@ export default {
       </div>
     </div>
 
-    <!-- delete user modal -->
-    <div
-      class="modal fade"
-      id="deleteUserModal"
-      tabindex="-1"
-      aria-labelledby="deleteUserModalLabel"
-      aria-hidden="true"
-      data-bs-backdrop="static"
-      data-bs-keyboard="false"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-md">
-        <div class="modal-content">
-          <div class="modal-body d-flex align-items-start justify-content-between">
-            <div>
-              <h5 class="modal-title mb-1">Delete User</h5>
-              <div class="text-muted">Are you sure you want to delete this user?</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
+  <div class="modal fade" id="actionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
 
-          <div class="modal-footer">
-            <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
-            <button type="submit" class="btn btn-primary" @click="deleteUser" :disabled="loading">
-              <span v-if="loading">removing...</span>
-              <span v-else>Yes</span>
-            </button>
-          </div>
+        <div class="modal-header">
+          <h5 class="modal-title">
+            {{ formattedAction }}
+          </h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-      </div>
-    </div>
 
-    <!-- restore user modal -->
-    <div
-      class="modal fade"
-      id="restoreUserModal"
-      tabindex="-1"
-      aria-labelledby="restoreUserModalLabel"
-      aria-hidden="true"
-      data-bs-backdrop="static"
-      data-bs-keyboard="false"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-md">
-        <div class="modal-content">
-          <div class="modal-body d-flex align-items-start justify-content-between">
-            <div>
-              <h5 class="modal-title mb-1">Restore User</h5>
-              <div class="text-muted">Are you sure you want to restore this user?</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-body">
+
+          <!-- Hearing Date -->
+          <div v-if="selectedAction === 'ADD_HEARING_DATE'">
+            <label class="form-label">Hearing Date</label>
+            <input
+              type="datetime-local"
+              class="form-control"
+              v-model="actionPayload.hearingDate"
+            />
           </div>
 
-          <div class="modal-footer">
-            <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
-            <button type="submit" class="btn btn-primary" @click="restoreUser" :disabled="loading">
-              <span v-if="loading">restoring...</span>
-              <span v-else>Yes</span>
-            </button>
+          <!-- Adjourn -->
+          <div v-if="selectedAction === 'ADJOURN_CASE'">
+            <p>Are you sure you want to adjourn this case?</p>
+            <input
+              type="text"
+              class="form-control"
+              v-model="actionPayload.reason"
+            />
           </div>
+
+          <!-- Reserve Judgement -->
+          <div v-if="selectedAction === 'JUDGMENT_RESERVED'">
+            <p>Judgement will be reserved. No decision will be recorded now.</p>
+            <input
+              type="textarea"
+              class="form-control"
+              v-model="actionPayload.note"
+            />
+          </div>
+
+          <!-- Judgement -->
+          <div v-if="selectedAction === 'ADD_JUDGEMENT'">
+            <label class="form-label">Judgement</label>
+            <textarea
+              class="form-control"
+              rows="3"
+              v-model="actionPayload.judgement"
+            ></textarea>
+          </div>
+
+          <!-- Close Case -->
+          <div v-if="selectedAction === 'CLOSE_CASE'">
+            <p>Are you sure you want to close this case?</p>
+          </div>
+
         </div>
-      </div>
-    </div>
 
-    <!-- Password Reset modal -->
-    <div
-      class="modal fade"
-      id="resetPasswordModal"
-      tabindex="-1"
-      aria-labelledby="resetPassword"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <ResetPasswordForm :userId="selectedUserId" />
+        <div class="modal-footer">
+          <button class="btn" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" @click="submitAction">
+            Submit
+          </button>
+        </div>
+
       </div>
     </div>
+  </div>
 
   </div>
 </template>

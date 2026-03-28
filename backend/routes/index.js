@@ -11,7 +11,7 @@ import DisciplinaryRecordHandler from './DisciplinaryRecordHandler.js'
 import HelpDeskHandler from './HelpDeskHandler.js'
 import TicketHistoryHandler from './TicketHistoryHandler.js'
 import TicketNoteHandler from './TicketNoteHandler.js'
-// import InvoiceHandler from './InvoiceHandler.js'
+import DisciplinaryHistoryHandler from './DisciplinaryHistoryHandler.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -38,7 +38,8 @@ export function init(app) {
   router.use('/helpDesk', HelpDeskHandler)
   router.use('/ticketHistory', TicketHistoryHandler)
   router.use('/ticketNotes', TicketNoteHandler)
-  
+  router.use('/recordsHistory', DisciplinaryHistoryHandler) 
+
   router.all('/', function (request, res) {
     res.status(404)
     res.send({

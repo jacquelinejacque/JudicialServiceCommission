@@ -22,3 +22,27 @@ export const TicketActions = {
   TEAM_CHANGED: "TEAM_CHANGED",
   SLA_CREATED: "SLA_CREATED",
 };
+export const STATUS_FLOW = {
+  ADD_HEARING_DATE: {
+    allowedFrom: ["Filed", "Pending"],
+    nextStatus: "Scheduled"
+  },
+  AUTO_START_HEARING: { allowedFrom: ["Scheduled"], nextStatus: "Hearing" },
+  ADJOURN_CASE: {
+    allowedFrom: ["Hearing"],
+    nextStatus: "Adjourned"
+  },
+
+  JUDGMENT_RESERVED: {
+    allowedFrom: ["Hearing"],
+    nextStatus: "Judgment Reserved"
+  },
+  ADD_JUDGEMENT: {
+    allowedFrom: ["Hearing", "Adjourned", "Judgment Reserved"],
+    nextStatus: "Judgment Delivered"
+  },
+  CLOSE_CASE: {
+    allowedFrom: ["Judgment Delivered"],
+    nextStatus: "Closed"
+  }
+};

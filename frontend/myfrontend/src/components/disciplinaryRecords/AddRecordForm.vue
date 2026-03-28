@@ -52,7 +52,7 @@ export default {
     },
     async handleSubmit() {
       try {
-        if (!this.formData.officerName || !this.formData.designation || !this.formData.dateFiled || !this.formData.natureOfCharges || !this.formData.panel || !this.formData.decision ) {
+        if (!this.formData.officerName || !this.formData.pjNumber || !this.formData.designation || !this.formData.dateEscalated || !this.formData.natureOfCharges || !this.formData.panel  ) {
         this.showToast('Please fill all required fields.', true)
         return
         }
@@ -60,11 +60,13 @@ export default {
         this.loading = true
         const submitData = {
             officerName: this.formData.officerName,
+            pjNumber: this.formData.pjNumber,
             designation: this.formData.designation,
-            dateFiled: this.formData.dateFiled,
             natureOfCharges: this.formData.natureOfCharges,
             panel: this.formData.panel,
-            decision: this.formData.decision
+            caseAgainst: this.formData.caseAgainst,
+            dateEscalated: this.formData.dateEscalated,
+            assignedTo: this.formData.assignedTo
         }
 
         console.log('Submitting data:', submitData)
@@ -93,11 +95,14 @@ export default {
     resetForm() {
       this.formData = {
         officerName: '',
+        pjNumber: '',
         designation: '',
-        dateFiled: '',
         natureOfCharges: '',
         panel: '',
         decision: '',
+        assignedTo: '',
+        caseAgainst: '',
+        dateEscalated:'',
       }
 
       this.formSubmitted = true
@@ -127,6 +132,10 @@ export default {
               <input type="text" class="form-control" id="officerName" v-model="formData.officerName"  />
             </div>
             <div class="col-md-6 mb-3">
+              <label for="name" class="form-label">PJ Number</label>
+              <input type="text" class="form-control" id="pjNumber" v-model="formData.pjNumber"  />
+            </div>
+            <div class="col-md-6 mb-3">
               <label for="designation" class="form-label">Designation</label>
               <input
                 type="text"
@@ -136,38 +145,40 @@ export default {
               />
             </div>
             <div class="col-md-6 mb-3">
-              <label for="dateFiled" class="form-label">Date Filed</label>
+              <label for="dateEscalated" class="form-label">Date Escalated</label>
               <input
                 type="date"
                 class="form-control"
-                id="dateFiled"
-                v-model="formData.dateFiled"                
+                id="dateEscalated"
+                v-model="formData.dateEscalated"                
               />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label for="decision" class="form-label">Decision</label>
-              <input
-                type="text"
-                class="form-control"
-                id="decision"
-                v-model="formData.decision"                
-              />
-            </div>            
+            </div>          
             <div class="col-md-6 mb-3">
             <label for="natureOfCharges" class="form-label">Nature Of Charges</label>
             <input type="text" class="form-control" id="natureOfCharges" v-model="formData.natureOfCharges"  />
             </div>
 
             <div class="col-md-6 mb-3">
-            <label class="form-label text-weight-1000">Select Panel</label>
-                <select v-model="formData.panel" class="form-control">
-                <option value="">Select Panel</option>
-                <option value="panel1">Panel 1</option>
-                <option value="panel2">Panel 2</option>
-                </select>
-           
+              <label class="form-label text-weight-1000">Select Panel</label>
+              <select v-model="formData.panel" class="form-control">
+              <option value="">Select Panel</option>
+              <option value="panel1">Panel 1</option>
+              <option value="panel2">Panel 2</option>
+              </select>           
             </div>
 
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-weight-1000">Select Case Against</label>
+              <select v-model="formData.caseAgainst" class="form-control">
+              <option value="">Select Panel</option>
+              <option value="Judicial Staff">Judicial Staff</option>
+              <option value="Judicial Officer">Judicial Officer</option>
+              </select>           
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="assignedTo" class="form-label">Assigned To</label>
+              <input type="text" class="form-control" id="assignedTo" v-model="formData.assignedTo"  />
+            </div>            
           </div>
         </div>
         <div class="modal-footer">

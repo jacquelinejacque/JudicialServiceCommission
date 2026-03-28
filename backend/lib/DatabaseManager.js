@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 
 import User from '../models/Users.js';
 import DisciplinaryRecord from '../models/DisciplinaryRecords.js'
+import DisciplinaryHistory from '../models/DisciplinaryHistory.js';
 import HelpDesk from '../models/HelpDesk.js'
 import TicketHistory from '../models/TicketHistory.js'
 import TicketNote from "../models/TicketNote.js";
@@ -17,6 +18,7 @@ class DatabaseManager {
     this.helpdesk = null;
     this.ticketHistory = null;
     this.ticketNote = null;
+    this.disciplinaryHistory = null;
     // this.invoice = null;
     // this.invoiceItem = null;
   }
@@ -58,6 +60,7 @@ class DatabaseManager {
       this.helpdesk = HelpDesk.init(this.sequelize);
       this.ticketHistory = TicketHistory.init(this.sequelize);
       this.ticketNote = TicketNote.init(this.sequelize);
+      this.disciplinaryHistory = DisciplinaryHistory.init(this.sequelize);
 
       this.createRelationships();
 
@@ -193,6 +196,36 @@ class DatabaseManager {
         onDelete: "RESTRICT",
         onUpdate: "CASCADE",
       });
+
+      // DisciplinaryRecord -> DisciplinaryHistory
+      this.disciplinaryRecord.hasMany(this.disciplinaryHistory, {
+        as: "history",
+        foreignKey: { name: "recordID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.disciplinaryHistory.belongsTo(this.disciplinaryRecord, {
+        as: "record",
+        foreignKey: { name: "recordID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      // User -> DisciplinaryHistory (who performed the action)
+      this.user.hasMany(this.disciplinaryHistory, {
+        as: "performedDisciplinaryActions",
+        foreignKey: { name: "performedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.disciplinaryHistory.belongsTo(this.user, {
+        as: "actor",
+        foreignKey: { name: "performedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });      
     } catch (error) {
       console.error("Error in createRelationships method:", error);
     }

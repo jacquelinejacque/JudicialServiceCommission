@@ -24,9 +24,6 @@ class DisciplinaryRecord {
       panel: {
         type: DataTypes.STRING,
       },         
-      decision: {
-        type: DataTypes.STRING,
-      },
       status: {
         type: DataTypes.ENUM,
         allowNull: false,
@@ -36,8 +33,52 @@ class DisciplinaryRecord {
         ],
         defaultValue: 'Filed'
       },
+      pjNumber: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      dateEscalated: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      caseAgainst: {
+        type: DataTypes.ENUM,
+        values: ["Judicial Officer", "Judicial Staff"],
+        allowNull: false,
+      },
+      assignedTo: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      fileNumber: {
+        type: DataTypes.STRING,
+        unique: true,
+      },
+      hearingDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      judgementDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },      
+      judgement: {
+        type: DataTypes.STRING,
+      },
+      adjournReason: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
 
-      
+      reservedNote: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+
+      reservedDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     });
   }
 }
