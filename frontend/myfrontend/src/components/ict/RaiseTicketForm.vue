@@ -28,11 +28,6 @@ export default {
 
     async handleSubmit() {
       try {
-        if (!this.formData.issueType || !this.formData.title || !this.formData.description) {
-          this.showToast('Issue type, title, and description are required.', true)
-          return
-        }
-
         this.loading = true
 
         const submitData = {
@@ -41,8 +36,6 @@ export default {
           description: this.formData.description,
           priority: this.formData.priority || null
         }
-
-        console.log('Submitting ticket data:', submitData)
 
         const res = await axios.post(
           `${Const.BASE_URL}/helpDesk/raiseTicket`,
@@ -55,22 +48,28 @@ export default {
         )
 
         if (res.data?.status === 200) {
-          this.showToast('Ticket raised successfully', false)
-          this.$emit('ticket-raised', res.data.ticket)
+          this.$emit('ticket-raised', {
+            ticket: res.data.ticket,
+            message: res.data.message || 'Ticket raised successfully'
+          })
           this.resetForm()
         } else {
-          const message = res.data?.message || 'Failed to raise ticket'
-          this.showToast(message, true)
+          this.showToast(res.data?.message || 'Failed to raise ticket', true)
         }
       } catch (error) {
         console.error('Error:', error.response?.data || error.message)
-        const message = error.response?.data?.message || 'Failed to raise ticket, please try again'
+
+        const message =
+          error.response?.data?.message ||
+          error.response?.data?.error?.message ||
+          error.message ||
+          'Failed to raise ticket'
+
         this.showToast(message, true)
       } finally {
         this.loading = false
       }
     },
-
     resetForm() {
       this.formData = {
         issueType: '',
@@ -103,10 +102,17 @@ export default {
               <label for="issueType" class="form-label">Issue Type</label>
               <select id="issueType" class="form-control" v-model="formData.issueType">
                 <option value="">Select Issue Type</option>
-                <option value="technical">Technical</option>
-                <option value="billing">Billing</option>
-                <option value="general">General</option>
-              </select>
+                <option value="hardware">Hardware</option>
+                <option value="software">Software</option>
+                <option value="network">Network</option>
+                <option value="email">Email</option>
+                <option value="account_access">Account Access</option>
+                <option value="printer">Printer</option>
+                <option value="internet">Internet</option>
+                <option value="security">Security</option>
+                <option value="system_error">System Error</option>
+                <option value="other">Other</option>
+              </select>             
             </div>
 
             <div class="col-md-6 mb-3">

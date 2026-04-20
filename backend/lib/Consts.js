@@ -24,7 +24,7 @@ export const TicketActions = {
 };
 export const STATUS_FLOW = {
   ADD_HEARING_DATE: {
-    allowedFrom: ["Filed", "Pending"],
+    allowedFrom: ["Admitted", "Adjourned"],
     nextStatus: "Scheduled"
   },
   AUTO_START_HEARING: { allowedFrom: ["Scheduled"], nextStatus: "Hearing" },

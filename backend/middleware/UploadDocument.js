@@ -2,7 +2,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-const uploadDir = "uploads/helpdesk";
+const uploadDir = "uploads/documents";
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -39,7 +39,7 @@ const fileFilter = function (req, file, cb) {
   cb(new Error("Only PDF, XLS, XLSX, DOC, and DOCX files are allowed"));
 };
 
-const uploadTicketNoteAttachment = multer({
+const uploadDocument = multer({
   storage,
   fileFilter,
   limits: {
@@ -47,4 +47,4 @@ const uploadTicketNoteAttachment = multer({
   },
 });
 
-export default uploadTicketNoteAttachment;
+export default uploadDocument;

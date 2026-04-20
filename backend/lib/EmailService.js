@@ -388,6 +388,44 @@ class EmailService {
             .then(() => callback(null))
             .catch((err) => callback(err));
     }
+
+    static sendReportCreatedNotificationToRegistrar(data, callback) {
+        const {
+            to,
+            registrarName,
+            title,
+            source,
+            complainantName,
+            receivedBy,
+            receivedDate,
+            recordID,
+        } = data;
+
+        const subject = `New Disciplinary Report Received - ${title || recordID}`;
+
+        const html = `
+            <div>
+                <p>Hello ${registrarName || "Registrar"},</p>
+
+                <p>A new disciplinary report has been created successfully and requires your attention.</p>
+
+                <p><strong>Report ID:</strong> ${recordID || "_"}</p>
+                <p><strong>Title:</strong> ${title || "_"}</p>
+                <p><strong>Source:</strong> ${source || "_"}</p>
+                <p><strong>Complainant Name:</strong> ${complainantName || "_"}</p>
+                <p><strong>Received By:</strong> ${receivedBy || "_"}</p>
+                <p><strong>Received Date:</strong> ${
+                    receivedDate ? new Date(receivedDate).toLocaleString() : "_"
+                }</p>
+
+                <p>Please go to the site and assign this report to the Director Legal Services for further action.</p>
+            </div>
+        `;
+
+        this.sendMail({ to, subject, html })
+            .then(() => callback(null))
+            .catch((err) => callback(err));
+    }
 }
 
 

@@ -8,47 +8,71 @@ class DisciplinaryRecord {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      stage: {
+        type: DataTypes.ENUM,
+        values: ['REPORT', 'CASE'],
+        defaultValue: 'REPORT'
+      },      
+      source: {
+        type: DataTypes.ENUM,
+        values: ['OCJ', 'PUBLIC']
+      },
+
+      complainantName: {
+        type: DataTypes.STRING
+      },
+      title: {
+        type: DataTypes.STRING
+      },
+      reportFile: {
+        type: DataTypes.STRING
+      },
       officerName: {
         type: DataTypes.STRING,
       },
       designation: {
         type: DataTypes.STRING,
       },
-      dateFiled: {
+      receivedAt: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
       },
       natureOfCharges:{
         type: DataTypes.STRING,
       },
       panel: {
-        type: DataTypes.STRING,
+        type: DataTypes.ENUM,
+        values: ['Panel_1', 'Panel_2', 'Panel_3', 'Panel_4', 'Panel_5', 'Panel_6', 'Panel_7'],
       },         
       status: {
         type: DataTypes.ENUM,
         allowNull: false,
         values: [
-            'Filed', 'Pending', 'Scheduled', 'Hearing' , 'Adjourned', 'Judgment Reserved', 
-            'Judgment Delivered', 'Appeal Pending', 'Concluded', 'Dismissed', 'Withdrawn', 'Closed'
+            'Received', 'Registered', 'Under_review', 'Processed','Preliminary_review_completed', 'Admitted', 
+            'Pending', 'Scheduled', 'Hearing' , 'Adjourned', 'Judgment Reserved', 'Judgment Delivered',  'Closed'
         ],
-        defaultValue: 'Filed'
+        defaultValue: 'Received'
       },
       pjNumber: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       dateEscalated: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
+      },
+      dateFiled: {
+        type: DataTypes.DATE,
+        allowNull: true
       },
       caseAgainst: {
         type: DataTypes.ENUM,
         values: ["Judicial Officer", "Judicial Staff"],
-        allowNull: false,
+        allowNull: true,
       },
       assignedTo: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
       fileNumber: {
         type: DataTypes.STRING,
@@ -61,7 +85,28 @@ class DisciplinaryRecord {
       judgementDate: {
         type: DataTypes.DATE,
         allowNull: true,
-      },      
+      },
+      summary: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      summaryFile: {
+        type: DataTypes.STRING,
+        allowNull: true
+      },
+      boardBriefFile: {
+        type: DataTypes.STRING,
+        allowNull: true
+      },  
+
+      boardBrief: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      preliminaryReport: {
+        type: DataTypes.STRING,
+        allowNull: true
+      },
       judgement: {
         type: DataTypes.STRING,
       },
@@ -79,6 +124,14 @@ class DisciplinaryRecord {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      receivedBy: {
+        type: DataTypes.UUID,
+        allowNull: false
+      },
+      receivedDate: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }     
     });
   }
 }

@@ -25,7 +25,7 @@ class User {
       role: {
         type: DataTypes.ENUM,
         allowNull: false,
-        values: ['admin', 'normalUser', 'agent'],
+        values: ['admin', 'normalUser', 'agent', 'registrar', 'directorLegal', 'legalTeam', 'boardsDirector'],
         defaultValue: 'normalUser'
       },   
       team: {

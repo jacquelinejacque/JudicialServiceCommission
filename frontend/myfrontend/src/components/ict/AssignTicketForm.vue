@@ -6,18 +6,23 @@ import Toastify from 'toastify-js'
 export default {
   props: {
     ticket: { type: Object, required: true },
-    mode: { type: String, default: 'assign' } // 'assign' or 'reassign'
+    mode: { type: String, default: 'assign' }
   },
 
   data() {
     return {
       users: [],
+      teams: ['JSC', 'eboard', 'tonerSupport', 'networkSupport', 'softwareSupport'],
       formData: {
         ticketID: '',
         ticketNumber: '',
         assignedTo: '',
         priority: '',
-        reason: '' // only used for reassign
+        reason: '',
+        escalatedToTeam: '',
+        resolutionDetails: '',
+        note: '',
+        attachments: null
       },
       loadingUsers: false,
       loading: false
@@ -34,7 +39,11 @@ export default {
             ticketNumber: newVal.ticketNumber || '',
             assignedTo: newVal.assignedTo || '',
             priority: newVal.priority || '',
-            reason: '' // reset reason on ticket change
+            reason: '',
+            escalatedToTeam: '',
+            resolutionDetails: '',
+            note: '',
+            attachments: null
           }
         }
       }
@@ -73,57 +82,93 @@ export default {
 
     async handleSubmit() {
       try {
-        if (!this.formData.assignedTo) {
-          this.showToast('Please select a user', true)
-          return
-        }
-
-        if (this.mode === 'reassign' && !this.formData.reason) {
-          this.showToast('Please provide a reason for reassignment', true)
-          return
-        }
-
-        if (!this.formData.priority && this.mode === 'assign') {
-          this.showToast('Please select priority', true)
-          return
-        }
-
         this.loading = true
 
-        const submitData = {
-          ticketID: this.formData.ticketID,
-          assignedTo: this.formData.assignedTo,
-          priority: this.formData.priority
+        let url = ''
+        let payload = {
+          ticketID: this.formData.ticketID
         }
 
-        if (this.mode === 'reassign') {
-          submitData.reason = this.formData.reason
+        switch (this.mode) {
+          case 'assign':
+            if (!this.formData.assignedTo || !this.formData.priority) {
+              return this.showToast('Assign user and priority required', true)
+            }
+            payload.assignedTo = this.formData.assignedTo
+            payload.priority = this.formData.priority
+            url = `${Const.BASE_URL}/helpDesk/assign`
+            break
+
+          case 'reassign':
+            if (!this.formData.assignedTo || !this.formData.reason) {
+              return this.showToast('User and reason required', true)
+            }
+            payload.assignedTo = this.formData.assignedTo
+            payload.reason = this.formData.reason
+            url = `${Const.BASE_URL}/helpDesk/reassignTicket`
+            break
+
+          case 'escalate':
+            if (!this.formData.assignedTo || !this.formData.escalatedToTeam || !this.formData.reason) {
+              return this.showToast('All escalation fields required', true)
+            }
+            payload.assignedTo = this.formData.assignedTo
+            payload.escalatedToTeam = this.formData.escalatedToTeam
+            payload.reason = this.formData.reason
+            url = `${Const.BASE_URL}/helpDesk/escalateTicket`
+            break
+
+          case 'resolve':
+            if (!this.formData.resolutionDetails) {
+              return this.showToast('Resolution details required', true)
+            }
+            payload.resolutionDetails = this.formData.resolutionDetails
+            url = `${Const.BASE_URL}/helpDesk/resolveTicket`
+            break
+
+          case 'close':
+            url = `${Const.BASE_URL}/helpDesk/closeTicket`
+            break
+
+          case 'notes': {
+            const formData = new FormData()
+            formData.append('ticketID', this.formData.ticketID)
+            formData.append('note', this.formData.note)
+            if (this.formData.attachments) {
+              formData.append('attachment', this.formData.attachments)
+            }
+
+            await axios.post(`${Const.BASE_URL}/ticketNotes/add`, formData, {
+              headers: {
+                'access-token': localStorage.getItem('accessToken'),
+                'Content-Type': 'multipart/form-data'
+              }
+            })
+
+            this.$emit('ticket-Assigned')
+            return
+          }
+
+          default:
+            return this.showToast('Invalid action selected', true)
         }
 
-        const url =
-          this.mode === 'reassign'
-            ? `${Const.BASE_URL}/helpDesk/reassignTicket`
-            : `${Const.BASE_URL}/helpDesk/assign`
-
-        const res = await axios.post(url, submitData, {
+        const res = await axios.post(url, payload, {
           headers: { 'access-token': localStorage.getItem('accessToken') }
         })
 
         if (res.data?.status === 200) {
-          this.showToast(
-            this.mode === 'reassign' ? 'Ticket reassigned successfully' : 'Ticket assigned successfully'
-          )
           this.$emit('ticket-Assigned', res.data.ticket)
         } else {
           this.showToast(res.data?.message || 'Failed', true)
         }
+
       } catch (error) {
-        console.error('Submit error:', error)
         this.showToast(error.response?.data?.message || 'Failed', true)
       } finally {
         this.loading = false
       }
-    }
+    },
   }
 }
 </script>
@@ -133,7 +178,16 @@ export default {
     <form @submit.prevent="handleSubmit">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">{{ mode === 'reassign' ? 'Reassign Ticket' : 'Assign Ticket' }}</h5>
+        <h5 class="modal-title">
+          {{
+            mode === 'assign' ? 'Assign Ticket' :
+            mode === 'reassign' ? 'Reassign Ticket' :
+            mode === 'escalate' ? 'Escalate Ticket' :
+            mode === 'notes' ? 'Add Note' :
+            mode === 'resolve' ? 'Resolve Ticket' :
+            'Close Ticket'
+          }}
+        </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
@@ -154,7 +208,7 @@ export default {
             </div>
 
             <!-- Assign/Reassign Fields -->
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="mode === 'assign' || mode === 'reassign'">
               <label for="assignedTo" class="form-label">Assign To</label>
               <select
                 id="assignedTo"
@@ -189,15 +243,75 @@ export default {
                 required
               ></textarea>
             </div>
+
+            <div v-if="mode === 'escalate'" class="col-md-6 mb-3">
+              <label class="form-label">Escalate To Team</label>
+              <select v-model="formData.escalatedToTeam" class="form-select">
+                <option value="">Select Team</option>
+                <option v-for="team in teams" :key="team" :value="team">{{ team }}</option>
+              </select>
+            </div>
+
+            <div v-if="mode === 'escalate'" class="col-md-6 mb-3">
+              <label class="form-label">Assign To</label>
+              <select v-model="formData.assignedTo" class="form-select">
+                <option value="">Select user</option>
+                <option v-for="user in users" :key="user.userID" :value="user.userID">
+                  {{ user.name }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="mode === 'escalate'" class="col-md-12 mb-3">
+              <label class="form-label">Reason</label>
+              <textarea class="form-control" v-model="formData.reason"></textarea>
+            </div>
+
+            <div v-if="mode === 'notes'" class="col-md-12 mb-3">
+              <label class="form-label">Note</label>
+              <textarea class="form-control" v-model="formData.note"></textarea>
+            </div>
+
+            <div v-if="mode === 'notes'" class="col-md-12 mb-3">
+              <label class="form-label">Attachment</label>
+              <input type="file" class="form-control" @change="e => formData.attachments = e.target.files[0]" />
+            </div>
+
+            <div v-if="mode === 'resolve'" class="col-md-12 mb-3">
+              <label class="form-label">Resolution Details</label>
+              <textarea class="form-control" v-model="formData.resolutionDetails"></textarea>
+            </div>
+
+            <div v-if="mode === 'close'" class="alert alert-info">
+              Are you sure you want to close this ticket?
+            </div>
           </div>
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn me-auto" data-bs-dismiss="modal" :disabled="loading">Close</button>
-          <button type="submit" class="btn btn-primary" :disabled="loading || loadingUsers">
-            <span v-if="loading">{{ mode === 'reassign' ? 'Reassigning...' : 'Assigning...' }}</span>
-            <span v-else>{{ mode === 'reassign' ? 'Reassign Ticket' : 'Assign Ticket' }}</span>
-          </button>
+<button type="submit" class="btn btn-primary" :disabled="loading || loadingUsers">
+  <span v-if="loading">
+    {{
+      mode === 'assign' ? 'Assigning...' :
+      mode === 'reassign' ? 'Reassigning...' :
+      mode === 'escalate' ? 'Escalating...' :
+      mode === 'notes' ? 'Saving Note...' :
+      mode === 'resolve' ? 'Resolving...' :
+      'Closing...'
+    }}
+  </span>
+  <span v-else>
+    {{
+      mode === 'assign' ? 'Assign Ticket' :
+      mode === 'reassign' ? 'Reassign Ticket' :
+      mode === 'escalate' ? 'Escalate Ticket' :
+      mode === 'notes' ? 'Add Note' :
+      mode === 'resolve' ? 'Resolve Ticket' :
+      'Close Ticket'
+    }}
+  </span>
+</button>
         </div>
       </div>
     </form>

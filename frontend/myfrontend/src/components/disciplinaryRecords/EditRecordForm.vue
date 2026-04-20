@@ -1,91 +1,106 @@
 <script>
-import { Const } from '@/utils/constants'
-import axios from 'axios'
-import Toastify from 'toastify-js'
-import { Toast } from 'bootstrap/dist/js/bootstrap.bundle'
+  import { Const } from '@/utils/constants'
+  import axios from 'axios'
+  import Toastify from 'toastify-js'
+  import { Toast } from 'bootstrap/dist/js/bootstrap.bundle'
 
-export default {
-  props: {
-    record: { type: Object, required: true }
-  },
-  data() {
-    return {
-      formData: {
-        officerName: '',
-        designation: '',
-        dateFiled: '',
-        natureOfCharges: '',
-        panel: '',
-        decision: '',
-      },
-      loading: false,
-      formSubmitted: false,
-      toastElement: null
-    }
-  },
+  export default {
+    props: {
+      record: { type: Object, required: true }
+    },
+    data() {
+      return {
+        formData: {
+          source: '',
+          title: '',
+          complainantName: '',
+          reportFile: null
+        },
+        loading: false,
+        formSubmitted: false,
+        toastElement: null
+      }
+    },
 
-  watch: {
-    record: {
-      immediate: true,
-      handler(newVal) {
-        if (newVal) {
-          this.formData = {
-            ...newVal,
+    watch: {
+      record: {
+        immediate: true,
+        handler(newVal) {
+          if (newVal) {
+            this.formData = {
+              source: newVal.source || '',
+              title: newVal.title || '',
+              complainantName: newVal.complainantName || '',
+              reportFile: null
+            }
           }
         }
       }
     },
+
+    mounted() {
+      (this.toastElement = new Toast(document.getElementById('newRecord-toast')))
     
-  },
-
-  mounted() {
-    (this.toastElement = new Toast(document.getElementById('newRecord-toast')))
-   
-  },
-
-  methods: {
-    showToast(message, isDanger) {
-      Toastify({
-        text: message,
-        // className: className,
-        style: {
-          background: isDanger ? '#d63939' : '#2fb344'
-        }
-      }).showToast()
     },
-    async handleSubmit() {
-      try {
-        this.loading = true
-        const updateData = {
-          recordId: this.record.recordID,
-          officerName: this.formData.officerName,
-          designation: this.formData.designation,
-          dateFiled: this.formData.dateFiled,
-          natureOfCharges: this.formData.natureOfCharges,
-          panel: this.formData.panel,
-          decision: this.formData.decision,
+
+    methods: {
+      showToast(message, isDanger) {
+        Toastify({
+          text: message,
+          // className: className,
+          style: {
+            background: isDanger ? '#d63939' : '#2fb344'
+          }
+        }).showToast()
+      },
+      handleFileChange(event) {
+        const file = event.target.files[0]
+        this.formData.reportFile = file || null
+      },    
+      async handleSubmit() {
+        try {
+          this.loading = true
+
+          const updateData = new FormData()
+          updateData.append('recordID', this.record.recordID)
+          updateData.append('source', this.formData.source)
+          updateData.append('title', this.formData.title)
+
+          if (this.formData.source === 'PUBLIC') {
+            updateData.append('complainantName', this.formData.complainantName || '')
+          }
+
+          if (this.formData.reportFile) {
+            updateData.append('reportFile', this.formData.reportFile)
+          }
+
+          const res = await axios.post(
+            `${Const.BASE_URL}/disciplinaryRecords/updateReport`,
+            updateData,
+            {
+              headers: {
+                'access-token': localStorage.getItem('accessToken')
+              }
+            }
+          )
+
+          if (res.data?.status === 200) {
+            this.showToast('Record details successfully updated', false)
+            this.$emit('record-Edited')
+          } else {
+            const message = res.data.message || 'Failed to update record'
+            this.showToast(message, true)
+          }
+        } catch (error) {
+          console.error(error)
+          this.showToast('Failed to update record', true)
+        } finally {
+          this.loading = false
         }
-        const res = await axios.post(`${Const.BASE_URL}/disciplinaryRecords/update`, updateData, {
-          headers: { 'access-token': localStorage.getItem('accessToken') }
-        })
-        console.log(res.data)
-        if (res.data?.status === 200) {
-          this.showToast('Record details successfully updated', false)
-          this.$emit('record-Edited');
-        } else {
-          const message = res.data.message || 'Failed to update record'
-          this.showToast(message, true)
-        }
-      } catch (error) {
-        console.error(error)
-        this.showToast('Failed to update record')
-      } finally {
-        this.loading = false
-      }
-    },
-   
+      },
+
+    }
   }
-}
 </script>
 
 <template>
@@ -104,51 +119,47 @@ export default {
         <div class="modal-body">
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label for="officerName" class="form-label">Officer Name</label>
-              <input type="text" class="form-control" id="officerName" v-model="formData.officerName" required />
+              <label for="title" class="form-label">Title</label>
+              <input type="text" class="form-control" id="title" v-model="formData.title" required />
             </div>
            
             <div class="col-md-6 mb-3">
-              <label for="designation" class="form-label">Designation</label>
+              <label for="source" class="form-label">Source</label>
+              <select
+                class="form-control"
+                id="source"
+                v-model="formData.source"
+                required
+              >
+                <option value="">Select Source</option>
+                <option value="OCJ">OCJ</option>
+                <option value="PUBLIC">PUBLIC</option>
+              </select>
+            </div>
+
+            <div class="col-md-6 mb-3" v-if="formData.source === 'PUBLIC'">
+              <label for="complainantName" class="form-label">Complainant Name</label>
               <input
                 type="text"
                 class="form-control"
-                id="designation"
-                v-model="formData.designation"
+                id="complainantName"
+                v-model="formData.complainantName"
                 required
               />
-            </div>
+            </div>   
             <div class="col-md-6 mb-3">
-              <label for="dateFiled" class="form-label">Date Filed</label>
+              <label for="reportFile" class="form-label">Replace Report File</label>
               <input
-                type="date"
+                type="file"
                 class="form-control"
-                id="dateFiled"
-                v-model="formData.dateFiled"
-                required
+                id="reportFile"
+                @change="handleFileChange"
+                accept=".pdf,.doc,.docx,.xls,.xlsx"
               />
+              <small class="text-muted">
+                Leave empty if you do not want to change the current file.
+              </small>
             </div>
-            <div class="col-md-6 mb-3">
-              <label for="decision" class="form-label">Decision</label>
-              <input type="text" class="form-control" id="decision" v-model="formData.decision" required />
-            </div>        
-            <div class="col-md-6 mb-3">
-              <label for="natureOfCharges" class="form-label">Nature of Charges</label>
-              <input type="text" class="form-control" id="natureOfCharges" v-model="formData.natureOfCharges" required />
-            </div>                
-            <div class="col-md-6 mb-3">
-                <label for="panel" class="form-label">Panel</label>
-                <select
-                    class="form-control"
-                    id="panel"
-                    v-model="formData.panel"
-                    required
-                >
-                    <option disabled value="">Select Panel</option>
-                    <option value="panel1">Panel 1</option>
-                    <option value="panel2">Panel 2</option>
-                </select>
-            </div>            
           </div>
         </div>
         <div class="modal-footer">

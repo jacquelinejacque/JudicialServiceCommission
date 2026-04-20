@@ -22,6 +22,7 @@ export default {
       loading: false,
       currentUser: JSON.parse(localStorage.getItem('user') || '{}'),      
       reassignMode: false,      
+      actionMode: 'assign',
 
       options: {
         responsive: true,
@@ -204,7 +205,7 @@ export default {
       }).showToast()
     },
 
-    handleTicket() {
+    handleTicket(payload) {
       const modal = document.getElementById('raiseTicketModal')
       if (modal) {
         const modalInstance = Modal.getInstance(modal) || new Modal(modal)
@@ -221,7 +222,7 @@ export default {
       }
 
       this.reloadTickets()
-      this.showToast('Ticket raised successfully')
+      this.showToast(payload?.message || 'Ticket raised successfully')
     },
 
     initDropdowns() {
@@ -231,24 +232,34 @@ export default {
         }
       })
     },
+    assignTicket(ticket) {
+      this.openActionModal(ticket, 'assign')
+    },
 
+    reassignTicket(ticket) {
+      this.openActionModal(ticket, 'reassign')
+    },
+
+    escalateTicket(ticket) {
+      this.openActionModal(ticket, 'escalate')
+    },
+
+    addNotes(ticket) {
+      this.openActionModal(ticket, 'notes')
+    },
+
+    resolveTicket(ticket) {
+      this.openActionModal(ticket, 'resolve')
+    },
+
+    closeTicket(ticket) {
+      this.openActionModal(ticket, 'close')
+    },
     viewTicket(ticket) {
       this.$router.push({
         name: 'ict-help-desk-view',
         params: { ticketID: ticket.ticketID }
       })
-    },
-
-    assignTicket(ticket) {
-      this.selectedTicket = ticket
-      this.reassignMode = false
-      this.showAssignModal()
-    },
-
-    reassignTicket(ticket) {
-      this.selectedTicket = ticket
-      this.reassignMode = true
-      this.showAssignModal()
     },
 
     showAssignModal() {
@@ -281,28 +292,13 @@ export default {
       this.reloadTickets()
       this.showToast(this.reassignMode ? 'Ticket reassigned successfully' : 'Ticket assigned successfully')
     },
-
-
-    escalateTicket(ticket) {
-      console.log('Escalate ticket', ticket)
-      this.$emit('escalate-ticket', ticket)
-    },
-
-    addNotes(ticket) {
-      console.log('Add notes', ticket)
-      this.$emit('add-notes', ticket)
-    },
-
-    resolveTicket(ticket) {
-      console.log('Resolve ticket', ticket)
-      this.$emit('resolve-ticket', ticket)
-    },
-
-    closeTicket(ticket) {
-      console.log('Close ticket', ticket)
-      this.$emit('close-ticket', ticket)
-    },
  
+    openActionModal(ticket, mode) {
+      this.selectedTicket = ticket
+      this.reassignMode = false
+      this.actionMode = mode
+      this.showAssignModal()
+    }
   },
 
   props: []
@@ -431,7 +427,7 @@ export default {
       aria-hidden="true"
     >
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <RaiseTicketForm @ticket-Raised="handleTicket" />
+        <RaiseTicketForm @ticket-raised="handleTicket" />
       </div>
     </div>
   </div>
@@ -448,9 +444,9 @@ export default {
           <AssignTicketForm
             v-if="selectedTicket"
             :ticket="selectedTicket"
-            :mode="reassignMode ? 'reassign' : 'assign'"
+            :mode="actionMode"
             @ticket-Assigned="handleTicketAssigning"
-          />
+          />       
         </div>
       </div>
    

@@ -8,6 +8,7 @@ import IctHelpDesk from '@/components/ict/IctHelpDesk.vue'
 import ViewTicket from '@/components/ict/ViewTicket.vue'
 import Users from '@/components/users/Users.vue'
 import DisciplinaryRecords from '@/components/disciplinaryRecords/DisciplinaryRecords.vue'
+import DisciplinaryRecordsDetails from '@/components/disciplinaryRecords/DisciplinaryRecordsDetails.vue'
 
 export const routes = [
   {
@@ -49,7 +50,13 @@ export const routes = [
         meta: {
           requiresAuth: true
         }
-      },      
+      },
+      {
+        path: 'disciplinary-records/:recordID',
+        name: 'RecordDetails',
+        component: DisciplinaryRecordsDetails,
+        props: true
+      },
       {
         path: 'ict/help-desk',
         name: 'ict-help-desk',

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import TicketNoteLogic from "../logic/TicketNoteLogic.js";
 import authenticate from "../middleware/AuthMiddleware.js";
-import uploadTicketNoteAttachment from "../middleware/UploadTicketNote.js";
+import uploadTicketNoteAttachment from "../middleware/UploadDocument.js";
 var TicketNoteHandler = Router();
 
 TicketNoteHandler.post(  "/add",  authenticate,  uploadTicketNoteAttachment.single("attachment"),  function (req, res) {
