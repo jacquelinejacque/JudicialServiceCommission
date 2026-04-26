@@ -51,7 +51,7 @@ class Utils {
             return inputtxt;
         } catch (error) {
             // console.log("String with Error "+str)
-            console.log("Error on trim " + error)
+            // console.log("Error on trim " + error)
             return str.replace(/\s/g, "");
         }
 
@@ -228,7 +228,7 @@ class Utils {
 
             return negativeSign + (j ? i.substr(0, j) + thousands : '') + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + thousands) + (decimalCount ? decimal + Math.abs(amount - i).toFixed(decimalCount).slice(2) : "");
         } catch (e) {
-            console.log(e)
+            // console.log(e)
             return amount
         }
     }
@@ -283,12 +283,126 @@ class Utils {
         
         return name.substring(0,3).toUpperCase()
     }
+    static formatPhoneNumber(phone) {
+        if (Utils.isEmpty(phone)) return phone;
 
+        let cleaned = phone.toString().replace(/\s+/g, "");
 
+        if (cleaned.startsWith("+")) {
+            cleaned = cleaned.substring(1);
+        }
 
+        if (cleaned.startsWith("0")) {
+            cleaned = `254${cleaned.substring(1)}`;
+        }
 
+        return cleaned;
+    }
+    
+    static sendSMS(phone, message, callback) {
+        try {
+            if (Utils.isEmpty(phone)) {
+                return callback("Phone number is required");
+            }
 
+            if (Utils.isEmpty(message)) {
+                return callback("SMS message is required");
+            }
 
+            const formattedPhone = Utils.formatPhoneNumber(phone);
+
+            // console.log("Sending SMS to:", formattedPhone);
+            // console.log("SMS message:", message);
+
+            // Replace this block with your real SMS gateway call
+            return callback(null, {
+                success: true,
+                message: "SMS sent successfully (mocked)",
+                phone: formattedPhone,
+            });
+        } catch (error) {
+            return callback(error.message || error);
+        }
+    }
+
+    static approvalRequiredMessage(guestName, hostName, expectedArrival, status) {
+        let formattedDate = "the scheduled time";
+
+        if (expectedArrival) {
+        formattedDate = new Date(expectedArrival).toLocaleString("en-KE", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+        }
+
+        if (status === "pendingApproval") {
+        return `Dear ${guestName}, your visit has been pre-registered and is awaiting approval. Host: ${hostName}. Expected arrival: ${formattedDate}. At JSC offices CBK Pension Towers`;
+        }
+
+        return `Dear ${guestName}, your visit has been successfully pre-registered. Host: ${hostName}. Expected arrival: ${formattedDate}. Please present your ID at reception.`;
+    }
+
+    static getReceptionDeskCode(receptionistDesk) {
+        if (receptionistDesk === "12th Floor Reception") return "12";
+        if (receptionistDesk === "13th Floor Reception") return "13";
+        if (receptionistDesk === "14th Floor Reception") return "14";
+        return "00";
+    }
+
+    static getDateStringForPass(date = new Date()) {
+        return moment(date).format("YYYYMMDD");
+    }
+
+    static padSequence(sequence) {
+        return String(sequence).padStart(3, "0");
+    }
+
+    static addMinutesToDate(date, minutes) {
+        const d = new Date(date);
+        d.setMinutes(d.getMinutes() + parseInt(minutes || 0));
+        return d;
+    }
+
+    static isGuestDetailsMatch(visit, body) {
+        const guestNameMatches =
+            Utils.trim((visit.guestName || "").toLowerCase()) ===
+            Utils.trim((body.guestName || "").toLowerCase());
+
+        const phoneMatches =
+            Utils.trim(visit.phone || "") === Utils.trim(body.phone || "");
+
+        const idTypeMatches =
+            Utils.trim(visit.idType || "").toLowerCase() ===
+            Utils.trim(body.idType || "").toLowerCase();
+
+        const idNumberMatches =
+            Utils.trim(visit.idNumber || "") === Utils.trim(body.idNumber || "");
+
+        return guestNameMatches && phoneMatches && idTypeMatches && idNumberMatches;
+    }
+
+    static generatePassNumber(deskCode, dateCode, sequence) {
+        return `VIS/JSC/${deskCode}/${dateCode}/${Utils.padSequence(sequence)}`;
+    }
+
+    static generateBadgeDisplayNumber(number) {
+        return `V-${String(number).padStart(3, "0")}`;
+    }
+
+    static getVisitorPreExpiryAlertMessage() {
+    return "Your approved visit time at JSC is expiring in 5 minutes. Please proceed to reception or request your host for extension.";
+}
+
+static getHostExpiryAlertMessage(guestName, passNumber) {
+    return `The visit for ${guestName}${passNumber ? ` (Pass ${passNumber})` : ""} has expired. Please confirm whether the visit should be extended or concluded.`;
+}
+
+static getReceptionOverstayAlertMessage(guestName, passNumber) {
+    return `Visitor ${guestName}, pass ${passNumber}, has overstayed beyond grace period. Please follow up.`;
+}
 
 
 

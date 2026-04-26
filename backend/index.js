@@ -6,9 +6,10 @@ import express from "express";
 import { createServer } from "http";
 import cors from "cors"; 
 import { startHearingCron } from "./lib/HearingCron.js";
+import startVisitAlertSMSCronJob from "./lib/VisitAlertSMSCronJob.js";
 
 startHearingCron();
-
+startVisitAlertSMSCronJob();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: __dirname + "/.env" });
 

@@ -7,6 +7,10 @@ import DisciplinaryHistory from '../models/DisciplinaryHistory.js';
 import HelpDesk from '../models/HelpDesk.js'
 import TicketHistory from '../models/TicketHistory.js'
 import TicketNote from "../models/TicketNote.js";
+import GuestVisit from '../models/GuestVisits.js';
+import GuestVisitApproval from "../models/GuestVisitApprovals.js";
+import VisitorBadge from "../models/VisitorBadges.js";
+import ReceptionDesk from "../models/ReceptionistDesks.js";
 
 dotenv.config();
 
@@ -19,8 +23,10 @@ class DatabaseManager {
     this.ticketHistory = null;
     this.ticketNote = null;
     this.disciplinaryHistory = null;
-    // this.invoice = null;
-    // this.invoiceItem = null;
+    this.guestVisit = null;
+    this.visitorBadge = null;
+    this.guestVisitApproval = null;
+    this.receptionDesk = null;
   }
 
   connect(callback) {
@@ -61,6 +67,10 @@ class DatabaseManager {
       this.ticketHistory = TicketHistory.init(this.sequelize);
       this.ticketNote = TicketNote.init(this.sequelize);
       this.disciplinaryHistory = DisciplinaryHistory.init(this.sequelize);
+      this.guestVisit = GuestVisit.init(this.sequelize);
+      this.guestVisitApproval = GuestVisitApproval.init(this.sequelize);
+      this.visitorBadge = VisitorBadge.init(this.sequelize);
+      this.receptionDesk = ReceptionDesk.init(this.sequelize);
 
       this.createRelationships();
 
@@ -225,7 +235,150 @@ class DatabaseManager {
         foreignKey: { name: "performedBy", allowNull: false },
         onDelete: "RESTRICT",
         onUpdate: "CASCADE",
+      });    
+            
+      // User (Host) -> GuestVisits
+      this.user.hasMany(this.guestVisit, {
+        as: "hostedGuestVisits",
+        foreignKey: { name: "hostUserID", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.user, {
+        as: "host",
+        foreignKey: { name: "hostUserID", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      // User (Creator) -> GuestVisits
+      this.user.hasMany(this.guestVisit, {
+        as: "createdGuestVisits",
+        foreignKey: { name: "createdBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.user, {
+        as: "creator",
+        foreignKey: { name: "createdBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      // User (Check-in Officer) -> GuestVisits
+      this.user.hasMany(this.guestVisit, {
+        as: "checkedInGuestVisits",
+        foreignKey: { name: "checkedInBy", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.user, {
+        as: "checkInOfficer",
+        foreignKey: { name: "checkedInBy", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      // User (Check-out Officer) -> GuestVisits
+      this.user.hasMany(this.guestVisit, {
+        as: "checkedOutGuestVisits",
+        foreignKey: { name: "checkedOutBy", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.user, {
+        as: "checkOutOfficer",
+        foreignKey: { name: "checkedOutBy", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
       });      
+
+      // GuestVisit -> GuestVisitApprovals
+      this.guestVisit.hasMany(this.guestVisitApproval, {
+        as: "approvals",
+        foreignKey: { name: "visitID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisitApproval.belongsTo(this.guestVisit, {
+        as: "guestVisit",
+        foreignKey: { name: "visitID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      // User -> GuestVisitApprovals (approver)
+      this.user.hasMany(this.guestVisitApproval, {
+        as: "guestVisitApprovalActions",
+        foreignKey: { name: "approvedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisitApproval.belongsTo(this.user, {
+        as: "approver",
+        foreignKey: { name: "approvedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      // VisitorBadge -> GuestVisit
+      this.visitorBadge.hasMany(this.guestVisit, {
+        as: "visits",
+        foreignKey: { name: "badgeID", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.visitorBadge, {
+        as: "badge",
+        foreignKey: { name: "badgeID", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.receptionDesk.hasMany(this.guestVisit, {
+        as: "guestVisits",
+        foreignKey: { name: "receptionDeskID", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.guestVisit.belongsTo(this.receptionDesk, {
+        as: "receptionDesk",
+        foreignKey: { name: "receptionDeskID", allowNull: true },
+        onDelete: "SET NULL",
+        onUpdate: "CASCADE",
+      });
+
+      this.receptionDesk.hasMany(this.visitorBadge, {
+        as: "visitorBadges",
+        foreignKey: { name: "receptionDeskID", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.visitorBadge.belongsTo(this.receptionDesk, {
+        as: "receptionDesk",
+        foreignKey: { name: "receptionDeskID", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.receptionDesk.belongsTo(this.user, {
+          foreignKey: "receptionistUserID",
+          as: "receptionist",
+      });
+
+      this.user.hasMany(this.receptionDesk, {
+          foreignKey: "receptionistUserID",
+          as: "assignedReceptionDesks",
+      });
     } catch (error) {
       console.error("Error in createRelationships method:", error);
     }
