@@ -42,4 +42,9 @@ HelpDeskHandler.post("/escalate", authenticate, function (req, res) {
         res.status(result.status || 200).json(result);
     });
 });
+HelpDeskHandler.post("/close", authenticate, function (req, res) {
+    HelpDeskLogic.closeTicket(req.user, req.body, function (result) {
+        res.status(result.status || 200).json(result);
+    });
+});
 export default HelpDeskHandler;

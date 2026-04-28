@@ -1,6 +1,8 @@
 <script>
 import { Const } from '../../utils/constants'
 import Toastify from 'toastify-js'
+import AssignTicketForm from './AssignTicketForm.vue'
+import { Modal } from 'bootstrap'
 
 export default {
   data() {
@@ -9,6 +11,8 @@ export default {
       notesLoading: false,
       ticket: null,
       ticketNotes: [],
+      selectedTicket: null,
+      actionMode: null,
       currentUser: JSON.parse(localStorage.getItem('user') || '{}')
     }
   },
@@ -16,11 +20,52 @@ export default {
   computed: {
     ticketID() {
       return this.$route.params.ticketID
+    },
+
+    isAdmin() {
+      return this.currentUser?.role === 'admin'
+    },
+
+    isAssignedAgent() {
+      return this.ticket?.assignedTo === this.currentUser?.userID
+    },
+
+    canAssignTicket() {
+      return this.isAdmin && this.ticket?.status === 'new'
+    },
+
+    canReassignTicket() {
+      return this.isAdmin && this.ticket?.status === 'open'
+    },
+
+    canEscalateTicket() {
+      const allowedStatuses = ['open', 'new'] 
+      return this.isAdmin && allowedStatuses.includes(this.ticket?.status)
+    },
+
+    canAddNotes() {
+      return (
+        this.ticket?.status === 'open' &&
+        (this.isAdmin || this.isAssignedAgent)
+      )
+    },
+
+    canResolveTicket() {
+      return (
+        this.ticket?.status === 'open' &&
+        (this.isAdmin || this.isAssignedAgent)
+      )
+    },
+
+    canCloseTicket() {
+      return this.isAdmin && this.ticket?.status === 'resolved'
     }
   },
-
   mounted() {
     this.loadTicketDetails()
+  },
+  components: {
+    AssignTicketForm
   },
 
   methods: {
@@ -93,8 +138,25 @@ export default {
       return 'Support'
     },
 
-    goBack() {
-      this.$router.push({ name: 'ict-help-desk' })
+    openAssignModal(ticket, mode) {
+      this.selectedTicket = ticket
+      this.actionMode = mode
+
+      const modalEl = document.getElementById('assignTicketModal')
+      const modal = new Modal(modalEl)
+      modal.show()
+    },
+
+    handleTicketAssigning() {
+      const modalEl = document.getElementById('assignTicketModal')
+      const modal = new Modal(modalEl)
+      if (modal) {
+        modal.hide()
+      }
+
+      this.selectedTicket = null
+      this.actionMode = null
+      this.loadTicketDetails()
     }
   }
 }
@@ -102,15 +164,70 @@ export default {
 
 <template>
   <div class="container-xxl py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="mb-1">Ticket Details</h4>
-        <small class="text-muted">View ticket guidance, notes and attachments.</small>
+    <div class="card-header bg-white d-flex align-items-center justify-content-between gap-3 py-3">
+      <div class="d-flex align-items-center gap-3">
+        <button
+          class="btn btn-outline-secondary btn-sm d-flex align-items-center"
+          @click="$router.back()"
+        >
+          <i class="bi bi-arrow-left"></i>
+        </button>
+
+        <div>
+          <h4 class="mb-1">Ticket Details</h4>
+          <small class="text-muted">View ticket guidance, notes and attachments.</small>
+        </div>
       </div>
 
-      <button class="btn btn-outline-secondary" @click="goBack">
-        Back to Tickets
-      </button>
+      <div v-if="ticket" class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+        <button
+          v-if="canAssignTicket"
+          class="btn btn-primary btn-sm"
+          @click="openAssignModal(ticket, 'assign')"
+        >
+          Assign Ticket
+        </button>
+
+        <button
+          v-if="canReassignTicket"
+          class="btn btn-warning btn-sm"
+          @click="openAssignModal(ticket, 'reassign')"
+        >
+          Reassign Ticket
+        </button>
+
+        <button
+          v-if="canEscalateTicket"
+          class="btn btn-danger btn-sm"
+          @click="openAssignModal(ticket, 'escalate')"
+        >
+          Escalate Ticket
+        </button>
+
+        <button
+          v-if="canAddNotes"
+          class="btn btn-info btn-sm text-white"
+          @click="openAssignModal(ticket, 'notes')"
+        >
+          Add Notes
+        </button>
+
+        <button
+          v-if="canResolveTicket"
+          class="btn btn-success btn-sm"
+          @click="openAssignModal(ticket, 'resolve')"
+        >
+          Resolve Ticket
+        </button>
+
+        <button
+          v-if="canCloseTicket"
+          class="btn btn-dark btn-sm"
+          @click="openAssignModal(ticket, 'close')"
+        >
+          Close Ticket
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="card shadow-sm">
@@ -205,4 +322,23 @@ export default {
       </div>
     </div>
   </div>
+
+      <!-- Assign Ticket modal -->
+      <div
+        class="modal fade"
+        id="assignTicketModal"
+        tabindex="-1"
+        aria-labelledby="assignTicket"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <AssignTicketForm
+            v-if="selectedTicket"
+            :ticket="selectedTicket"
+            :mode="actionMode"
+            @ticket-assigned="handleTicketAssigning"
+          />       
+        </div>
+      </div>
+
 </template>

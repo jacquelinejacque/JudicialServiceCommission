@@ -11,6 +11,7 @@ import nodemailer from "nodemailer";
 import EmailService from "../lib/EmailService.js";
 import AuditService from "../lib/AuditService.js";
 import { TicketActions } from "../lib/Consts.js";
+import { title } from "process";
 
 class HelpDeskLogic {
     static async raiseTicket(authUser, body, callback) {
@@ -1165,6 +1166,7 @@ class HelpDeskLogic {
                                                             escalatorName: authUser.name,
                                                             ticketNumber: updatedTicket.ticketNumber,
                                                             title: updatedTicket.title,
+                                                            issueType: updatedTicket.issueType,
                                                             priority: updatedTicket.priority,
                                                             status: updatedTicket.status,
                                                             escalatedToTeam: updatedTicket.escalatedToTeam,
@@ -1200,6 +1202,9 @@ class HelpDeskLogic {
                                         ticketNumber: updatedTicket.ticketNumber,
                                         priority: updatedTicket.priority,
                                         status: updatedTicket.status,
+                                        issueType: updatedTicket.issueType,
+                                        title: updatedTicket.title,
+                                        reason: updatedTicket.escalationReason,
                                     },
                                     () => done(null)
                                 );
@@ -1224,6 +1229,8 @@ class HelpDeskLogic {
                                                 ticketNumber: updatedTicket.ticketNumber,
                                                 status: updatedTicket.status,
                                                 reason: updatedTicket.escalationReason,
+                                                issueType: updatedTicket.issueType,
+                                                title: updatedTicket.title,
                                             },
                                             () => done(null)
                                         );
@@ -1238,6 +1245,155 @@ class HelpDeskLogic {
                             // Background only — no blocking
                         }
                     );
+                });
+            }
+        );
+    }
+
+    static closeTicket(authUser, body, callback) {
+        async.waterfall(
+            [
+                // 1) Auth + validate input
+                function (done) {
+                    if (!authUser || Utils.isEmpty(authUser.userID)) {
+                        return done({
+                            message: "Unauthorized",
+                            status: Consts.httpCodeUnauthorized,
+                        });
+                    }
+
+                    if (Utils.isEmpty(body.ticketID) && Utils.isEmpty(body.ticketNumber)) {
+                        return done({
+                            message: "ticketID or ticketNumber is required",
+                            status: Consts.httpCodeBadRequest,
+                        });
+                    }
+
+
+                    done(null);
+                },
+
+                // 2) Ensure ticket exists
+                function (done) {
+                    const where = {};
+
+                    if (!Utils.isEmpty(body.ticketID)) where.ticketID = body.ticketID;
+                    if (!Utils.isEmpty(body.ticketNumber)) where.ticketNumber = body.ticketNumber;
+
+                    DatabaseManager.helpdesk
+                        .findOne({ where })
+                        .then((ticket) => {
+                            if (!ticket) {
+                                return done({
+                                    message: "Ticket not found",
+                                    status: Consts.httpCodeNotFound,
+                                });
+                            }
+
+                            done(null, ticket);
+                        })
+                        .catch((err) =>
+                            done({
+                                message: "Failed to fetch ticket",
+                                status: Consts.httpCodeServerError,
+                                error: err,
+                            })
+                        );
+                },
+
+                // 3) Check permissions (admin or assigned agent)
+                function (ticket, done) {
+                    const isAdmin = authUser.role === "admin";
+                    const isAssignedAgent = ticket.assignedTo === authUser.userID;
+
+                    if (!isAdmin && !isAssignedAgent) {
+                        return done({
+                            message: "Forbidden: Only admins or assigned agents can close this ticket",
+                            status: Consts.httpCodeForbidden,
+                        });
+                    }
+
+                    done(null, ticket);
+                },
+                // 4) Ensure ticket is resolved before closing
+                function (ticket, done) {
+                    if (ticket.status !== "resolved") {
+                        return done({
+                            message: "Only resolved tickets can be closed",
+                            status: Consts.httpCodeBadRequest,
+                        });
+                    }
+
+                    done(null, ticket);
+                },
+                // 4) Update ticket to closed + audit
+                function (ticket, done) {
+                    DatabaseManager.sequelize
+                        .transaction(async (transaction) => {
+                            const updates = {
+                                status: "closed",
+                                closedDate: new Date(),
+                                updatedAt: new Date(),
+                            };
+
+                            const result = await DatabaseManager.helpdesk.update(
+                                updates,
+                                {
+                                    where: { ticketID: ticket.ticketID },
+                                    transaction,
+                                }
+                            );
+
+                            const affectedRows = Array.isArray(result)
+                                ? result[0]
+                                : result;
+
+                            if (!affectedRows) {
+                                throw new Error("Ticket closure failed");
+                            }
+
+                            await AuditService.log(
+                                {
+                                    ticketID: ticket.ticketID,
+                                    action: TicketActions.TICKET_CLOSED,
+                                    performedBy: authUser.userID,
+                                    fieldName: "status",
+                                    previousValue: ticket.status,
+                                    newValue: "closed",
+                                    description: `Ticket closed by ${authUser.name}`,
+                                },
+                                { transaction }
+                            );
+
+                            return {
+                                ...ticket.get({ plain: true }),
+                                ...updates,
+                            };
+                        })
+                        .then((updatedTicket) => done(null, updatedTicket))
+                        .catch((err) =>
+                            done({
+                                message: err.message || "Failed to close ticket",
+                                status: Consts.httpCodeServerError,
+                                error: err,
+                            })
+                        );
+                },
+            ],
+
+            function (err, updatedTicket) {
+                if (err) {
+                    return callback({
+                        status: err.status || Consts.httpCodeServerError,
+                        message: err.message || "Failed to close ticket",
+                        error: err.error || err,
+                    });
+                }
+
+                callback({
+                    status: Consts.httpCodeSuccess,
+                    message: "Ticket closed successfully",
+                    ticket: updatedTicket,
                 });
             }
         );

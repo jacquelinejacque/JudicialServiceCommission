@@ -332,7 +332,6 @@ class EmailService {
                 <p><strong>Priority:</strong> ${priority || "_"}</p>
                 <p><strong>Status:</strong> ${status || "escalated"}</p>
                 <p><strong>Reason:</strong> ${reason || "_"}</p>
-                <p><strong>SLA Target:</strong> ${slaTargetAt ? new Date(slaTargetAt).toLocaleString() : "_"}</p>
             </div>
         `;
 
@@ -362,7 +361,7 @@ class EmailService {
         const html = `
             <div>
                 <p>Hello ${assigneeName || "Agent"},</p>
-                <p>A help desk ticket has been <strong>escalated and assigned to you</strong>.</p>
+                <p>A help desk ticket has been <strong>escalated to you</strong>.</p>
 
                 <p><strong>Ticket Number:</strong> ${ticketNumber}</p>
                 <p><strong>Issue Type:</strong> ${issueType || "_"}</p>
@@ -376,9 +375,7 @@ class EmailService {
 
                 <p><strong>Reason:</strong> ${reason || "_"}</p>
                 <p><strong>Team:</strong> ${team || "_"}</p>
-                <p><strong>SLA Target:</strong> ${
-                    slaTargetAt ? new Date(slaTargetAt).toLocaleString() : "_"
-                }</p>
+                
 
                 <p>Please take the necessary action within the SLA timeframe.</p>
             </div>

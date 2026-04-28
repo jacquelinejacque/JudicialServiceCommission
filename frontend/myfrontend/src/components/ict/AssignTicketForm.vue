@@ -47,11 +47,19 @@ export default {
           }
         }
       }
-    }
+    },
+    'formData.escalatedToTeam'(newTeam) {
+      if (this.mode === 'escalate') {
+        this.formData.assignedTo = ''
+        this.fetchUsers(newTeam)
+      }
+    }    
   },
 
   mounted() {
-    this.fetchUsers()
+    if (this.mode === 'assign' || this.mode === 'reassign') {
+      this.fetchUsers('JSC')
+    }
   },
 
   methods: {
@@ -62,12 +70,27 @@ export default {
       }).showToast()
     },
 
-    async fetchUsers() {
+    async fetchUsers(team = '') {
       try {
         this.loadingUsers = true
+
+        const params = {
+          role: 'agent'
+        }
+
+        if ((this.mode === 'assign' || this.mode === 'reassign') && team) {
+          params.team = 'JSC'
+        }
+
+        if (this.mode === 'escalate' && team) {
+          params.team = team
+        }
+
         const res = await axios.get(`${Const.BASE_URL}/users/list`, {
-          params: { role: 'agent' },
-          headers: { 'access-token': localStorage.getItem('accessToken') }
+          params,
+          headers: {
+            'access-token': localStorage.getItem('accessToken')
+          }
         })
 
         const userList = res.data?.data || []
@@ -115,7 +138,7 @@ export default {
             payload.assignedTo = this.formData.assignedTo
             payload.escalatedToTeam = this.formData.escalatedToTeam
             payload.reason = this.formData.reason
-            url = `${Const.BASE_URL}/helpDesk/escalateTicket`
+            url = `${Const.BASE_URL}/helpDesk/escalate`
             break
 
           case 'resolve':
@@ -127,7 +150,7 @@ export default {
             break
 
           case 'close':
-            url = `${Const.BASE_URL}/helpDesk/closeTicket`
+            url = `${Const.BASE_URL}/helpDesk/close`
             break
 
           case 'notes': {
@@ -145,7 +168,7 @@ export default {
               }
             })
 
-            this.$emit('ticket-Assigned')
+            this.$emit('ticket-assigned')
             return
           }
 
@@ -158,7 +181,7 @@ export default {
         })
 
         if (res.data?.status === 200) {
-          this.$emit('ticket-Assigned', res.data.ticket)
+          this.$emit('ticket-assigned', res.data.ticket)
         } else {
           this.showToast(res.data?.message || 'Failed', true)
         }

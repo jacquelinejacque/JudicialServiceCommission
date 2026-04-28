@@ -190,83 +190,93 @@ static create(body, callback) {
             }
         );
     }
-    static list(param, callback) {
-        const baseQuery = {}; // No restriction: fetch all users
-        let filteredQuery = { ...baseQuery };
-        if (!Utils.isEmpty(param.role)) {
-            filteredQuery.role = param.role;
-        }    
+static list(param, callback) {
+    const baseQuery = {};
+    let filteredQuery = { ...baseQuery };
 
-        if (!Utils.isEmpty(param["search[value]"])) {
-            const searchValue = param["search[value]"];
-            filteredQuery = {
-                ...filteredQuery,
-                [Op.or]: [
-                    { email: { [Op.like]: `%${searchValue}%` } },
-                    { phone: { [Op.like]: `%${searchValue}%` } },
-                    { name: { [Op.like]: `%${searchValue}%` } },
-                    { status: { [Op.like]: `%${searchValue}%` } }, // allow search by status too
-                    { role: { [Op.like]: `%${searchValue}%` } },
-                    { team: { [Op.like]: `%${searchValue}%` } }
-                ],
-            };
-        }
+    if (!Utils.isEmpty(param.role)) {
+        filteredQuery.role = String(param.role).trim();
+    }
 
-        async.waterfall(
-            [
+    if (!Utils.isEmpty(param.team)) {
+        filteredQuery.team = String(param.team).trim();
+    }
+
+    console.log("USER LIST PARAMS:", param);
+    console.log("FILTERED QUERY:", filteredQuery);
+
+    if (!Utils.isEmpty(param["search[value]"])) {
+        const searchValue = param["search[value]"];
+
+        filteredQuery = {
+            ...filteredQuery,
+            [Op.or]: [
+                { email: { [Op.like]: `%${searchValue}%` } },
+                { phone: { [Op.like]: `%${searchValue}%` } },
+                { name: { [Op.like]: `%${searchValue}%` } },
+                { status: { [Op.like]: `%${searchValue}%` } },
+                { role: { [Op.like]: `%${searchValue}%` } },
+                { team: { [Op.like]: `%${searchValue}%` } }
+            ],
+        };
+    }
+
+    async.waterfall(
+        [
             function (done) {
-                // Count ALL users regardless of search
                 DatabaseManager.user
-                .count({ where: baseQuery })
-                .then((totalRecords) => done(null, totalRecords))
-                .catch((err) => done(err));
+                    .count({ where: baseQuery })
+                    .then((totalRecords) => done(null, totalRecords))
+                    .catch((err) => done(err));
             },
+
             function (totalRecords, done) {
-                // Count filtered users (if search applied)
                 DatabaseManager.user
-                .count({ where: filteredQuery })
-                .then((filteredRecords) => done(null, totalRecords, filteredRecords))
-                .catch((err) => done(err));
+                    .count({ where: filteredQuery })
+                    .then((filteredRecords) => done(null, totalRecords, filteredRecords))
+                    .catch((err) => done(err));
             },
+
             function (totalRecords, filteredRecords, done) {
                 const offset = parseInt(param.start) || 0;
-                const limit = parseInt(param.length) || 10;
+                const limit = parseInt(param.length) || 100;
 
                 DatabaseManager.user
-                .findAll({
-                    where: filteredQuery,
-                    attributes: ["userID", "name", "phone", "email", "role", "status","team"],
-                    order: [["createdAt", "DESC"]],
-                    offset: offset,
-                    limit: limit,
-                })
-                .then((data) => done(null, totalRecords, filteredRecords, data))
-                .catch((err) => done(err));
+                    .findAll({
+                        where: filteredQuery,
+                        attributes: ["userID", "name", "phone", "email", "role", "status", "team"],
+                        order: [["createdAt", "DESC"]],
+                        offset,
+                        limit,
+                    })
+                    .then((data) => done(null, totalRecords, filteredRecords, data))
+                    .catch((err) => done(err));
             },
-            ],
-            function (err, totalRecords, filteredRecords, data) {
+        ],
+
+        function (err, totalRecords, filteredRecords, data) {
             if (err) {
                 return callback({
-                status: Consts.httpCodeServerError,
-                message: "Failed to fetch User Contacts",
-                error: err,
-                data: [],
-                recordsTotal: 0,
-                recordsFiltered: 0,
+                    status: Consts.httpCodeServerError,
+                    message: "Failed to fetch User Contacts",
+                    error: err,
+                    data: [],
+                    recordsTotal: 0,
+                    recordsFiltered: 0,
                 });
             }
 
             return callback({
                 status: Consts.httpCodeSuccess,
                 message: "User Contacts fetched successfully",
-                data: data,
+                data,
                 draw: parseInt(param.draw),
                 recordsTotal: totalRecords,
                 recordsFiltered: filteredRecords,
             });
-            }
-        );
-    }
+        }
+    );
+}
 
     static update(body, callback) {
         async.waterfall(

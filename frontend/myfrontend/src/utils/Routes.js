@@ -9,6 +9,7 @@ import ViewTicket from '@/components/ict/ViewTicket.vue'
 import Users from '@/components/users/Users.vue'
 import DisciplinaryRecords from '@/components/disciplinaryRecords/DisciplinaryRecords.vue'
 import DisciplinaryRecordsDetails from '@/components/disciplinaryRecords/DisciplinaryRecordsDetails.vue'
+import GuestsManagement from '@/components/guests/GuestsManagement.vue'
 
 export const routes = [
   {
@@ -69,6 +70,14 @@ export const routes = [
       path: 'ict/help-desk/:ticketID',
       name: 'ict-help-desk-view',
       component: ViewTicket,
+        meta: {
+          requiresAuth: true
+        }
+      }, 
+      {
+        path: 'guests/guests-management',
+        name: 'guests-management',
+        component:GuestsManagement,
         meta: {
           requiresAuth: true
         }

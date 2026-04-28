@@ -16,7 +16,6 @@ UserHandler.get("/list",authenticate, function (req, res) {
 });
 // create a user
 UserHandler.post("/create", function (req, res) {
- 
   UserLogic.create(req.body, function (result) {
     res.json(result);
   });
