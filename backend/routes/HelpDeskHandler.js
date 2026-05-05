@@ -47,4 +47,14 @@ HelpDeskHandler.post("/close", authenticate, function (req, res) {
         res.status(result.status || 200).json(result);
     });
 });
+HelpDeskHandler.post("/escalation/respond", authenticate, function (req, res) {
+    HelpDeskLogic.respondToEscalatedTicket(req.user, req.body, function (result) {
+        res.status(result.status || 200).json(result);
+    });
+});
+HelpDeskHandler.get("/:ticketID", authenticate, function (req, res) {
+  HelpDeskLogic.getTicketByID(req.user, req.params.ticketID, function (result) {
+    res.status(result.status || 200).json(result);
+  });
+});
 export default HelpDeskHandler;

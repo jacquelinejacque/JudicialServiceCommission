@@ -87,7 +87,7 @@ class HelpDesk {
       },
 
       escalatedBy: {
-        type: DataTypes.UUID,
+        type: DataTypes.STRING,
         allowNull: true,
       },
 

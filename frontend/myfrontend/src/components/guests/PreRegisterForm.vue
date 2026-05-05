@@ -6,29 +6,55 @@ import Toastify from 'toastify-js'
 export default {
   data() {
     return {
-      formData: {
-        guestName: '',
-        phone: '',
-        email: '',
-        idType: '',
-        idNumber: '',
-        organization: '',
-        purpose: '',
-        department: '',
-        visitCategory: '',
-        expectedArrival: '',
-        expectedDeparture: '',
-        receptionDeskID: '',
-        
-      },
-      loading: false,
-      receptionDesks: [],
-      loadingReceptionDesks: false       
+        formData: {
+            guestName: '',
+            phone: '',
+            email: '',
+            idType: '',
+            idNumber: '',
+            organization: '',
+            purpose: '',
+            department: '',
+            visitCategory: '',
+            expectedArrival: '',
+            expectedDeparture: '',
+            receptionDeskID: '',
+            receptionistDesk: '',
+            hostUserID: '',
+            remarks: '',
+            hostUsers: [],
+            loadingHostUsers: false,
+        },
+        loading: false,
+        receptionDesks: [],
+        loadingReceptionDesks: false       
         
     }
   },
     mounted() {
-        this.fetchReceptionDesk();
+      this.fetchReceptionDesk();
+      if (this.isWalkIn) {
+        this.fetchHostUsers()
+      }
+    },
+    computed: {
+    isWalkIn() {
+        return this.mode === 'walkIn'
+    },
+
+    modalTitle() {
+        return this.isWalkIn ? 'Add Walk-In Guest' : 'Pre-register Guest'
+    },
+
+    submitText() {
+        return this.isWalkIn ? 'Save Walk-In Guest' : 'Pre-register Guest'
+    }
+    },
+    props: {
+        mode: {
+            type: String,
+            default: 'preRegister'
+        }
     },
   methods: {
     showToast(message, isDanger = false) {
@@ -41,35 +67,23 @@ export default {
     },
 
     validateForm() {
-      const requiredFields = [
-        'guestName',
-        'phone',
-        'idType',
-        'idNumber',
-        'purpose',
-        'department',
-        'visitCategory',
-        'expectedArrival',
-        'expectedDeparture',
-        'receptionDeskID'
-      ]
+        const requiredFields = this.isWalkIn
+            ? ['guestName', 'phone', 'idType', 'idNumber', 'purpose', 'department', 'receptionistDesk', 'hostUserID']
+            : ['guestName', 'phone', 'idType', 'idNumber', 'purpose', 'department', 'visitCategory', 'expectedArrival', 'expectedDeparture', 'receptionDeskID']
 
-      for (const field of requiredFields) {
-        if (!this.formData[field]) {
-          this.showToast(`${field.replace(/([A-Z])/g, ' $1')} is required.`, true)
-          return false
+        for (const field of requiredFields) {
+            if (!this.formData[field]) {
+            this.showToast(`${field.replace(/([A-Z])/g, ' $1')} is required.`, true)
+            return false
+            }
         }
-      }
 
-      if (
-        new Date(this.formData.expectedDeparture) <=
-        new Date(this.formData.expectedArrival)
-      ) {
-        this.showToast('Expected departure must be after expected arrival.', true)
-        return false
-      }
+        if (!this.isWalkIn && new Date(this.formData.expectedDeparture) <= new Date(this.formData.expectedArrival)) {
+            this.showToast('Expected departure must be after expected arrival.', true)
+            return false
+        }
 
-      return true
+        return true
     },
 
     async handleSubmit() {
@@ -78,36 +92,45 @@ export default {
 
         this.loading = true
 
-        const payload = {
-        guestName: this.formData.guestName,
-        phone: this.formData.phone,
-        email: this.formData.email || null,
-        idType: this.formData.idType,
-        idNumber: this.formData.idNumber,
-        organization: this.formData.organization || null,
-        purpose: this.formData.purpose,
-        department: this.formData.department || 'Administration',
-        visitCategory: this.formData.visitCategory || 'personalVisit',
-        expectedArrival: this.formData.expectedArrival
-            ? new Date(this.formData.expectedArrival).toISOString()
-            : null,
-        expectedDeparture: this.formData.expectedDeparture
-            ? new Date(this.formData.expectedDeparture).toISOString()
-            : null,
-        receptionDeskID: this.formData.receptionDeskID,
-       
-        }
+        const url = this.isWalkIn
+        ? `${Const.BASE_URL}/guestsVisits/walkIn`
+        : `${Const.BASE_URL}/guestsVisits/preRegister`
 
-        const res = await axios.post(
-          `${Const.BASE_URL}/guestsVisits/preRegister`,
-          payload,
-          {
-            headers: {
-              'access-token': localStorage.getItem('accessToken'),
-              'Content-Type': 'application/json'
+        const payload = this.isWalkIn
+        ? {
+            guestName: this.formData.guestName,
+            phone: this.formData.phone,
+            email: this.formData.email || null,
+            idType: this.formData.idType,
+            idNumber: this.formData.idNumber,
+            organization: this.formData.organization || null,
+            purpose: this.formData.purpose,
+            department: this.formData.department,
+            receptionistDesk: this.formData.receptionistDesk,
+            hostUserID: this.formData.hostUserID,
+            remarks: this.formData.remarks || null
             }
-          }
-        )
+        : {
+            guestName: this.formData.guestName,
+            phone: this.formData.phone,
+            email: this.formData.email || null,
+            idType: this.formData.idType,
+            idNumber: this.formData.idNumber,
+            organization: this.formData.organization || null,
+            purpose: this.formData.purpose,
+            department: this.formData.department || 'Administration',
+            visitCategory: this.formData.visitCategory || 'personalVisit',
+            expectedArrival: new Date(this.formData.expectedArrival).toISOString(),
+            expectedDeparture: new Date(this.formData.expectedDeparture).toISOString(),
+            receptionDeskID: this.formData.receptionDeskID
+            }
+
+        const res = await axios.post(url, payload, {
+        headers: {
+            'access-token': localStorage.getItem('accessToken'),
+            'Content-Type': 'application/json'
+        }
+        })
 
         const message = res.data?.message || 'Guest pre-registered successfully'
 
@@ -176,8 +199,38 @@ export default {
     } finally {
         this.loadingReceptionDesks = false
     }
+    }, 
+
+    async fetchHostUsers() {
+      try {
+        this.loadingHostUsers = true
+
+        const res = await axios.get(`${Const.BASE_URL}/users/list`, {
+          params: {
+            role: 'normalUser',
+            team: 'JSC'
+          },
+          headers: {
+            'access-token': localStorage.getItem('accessToken')
+          }
+        })
+
+        if (res.data?.status === 200) {
+          this.hostUsers = (res.data.data || []).filter(user => user.status === 'active')
+        } else {
+          this.hostUsers = []
+          this.showToast(res.data?.message || 'Failed to load host users', true)
+        }
+      } catch (err) {
+        console.error(err)
+        this.hostUsers = []
+        this.showToast(err?.response?.data?.message || 'Failed to fetch host users', true)
+      } finally {
+        this.loadingHostUsers = false
+      }
     }
-  }
+  },
+
 }
 </script>
 
@@ -186,7 +239,7 @@ export default {
     <form @submit.prevent="handleSubmit">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Pre-register Guest</h5>
+          <h5 class="modal-title">{{ modalTitle }}</h5>
           <button
             type="button"
             class="btn-close"
@@ -329,6 +382,33 @@ export default {
               ></textarea>
             </div>
 
+
+            <div class="col-md-6 mb-3" v-if="isWalkIn">
+              <label class="form-label">Host User</label>
+              <select
+                class="form-select"
+                v-model="formData.hostUserID"
+                :disabled="loadingHostUsers"
+              >
+                <option value="">
+                  {{ loadingHostUsers ? 'Loading host users...' : 'Select Host User' }}
+                </option>
+
+                <option
+                  v-for="user in hostUsers"
+                  :key="user.userID"
+                  :value="user.userID"
+                >
+                  {{ user.name }}
+                </option>
+              </select>
+            </div>
+
+            <div class="col-md-12 mb-3" v-if="isWalkIn">
+                <label class="form-label">Remarks</label>
+                <textarea class="form-control" rows="2" v-model="formData.remarks"></textarea>
+            </div>
+
           </div>
         </div>
 
@@ -339,7 +419,7 @@ export default {
 
           <button type="submit" class="btn btn-primary" :disabled="loading">
             <span v-if="loading">Submitting...</span>
-            <span v-else>Pre-register Guest</span>
+            <span v-else>{{ submitText }}</span>
           </button>
         </div>
       </div>

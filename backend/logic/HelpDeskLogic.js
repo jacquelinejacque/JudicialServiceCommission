@@ -1054,7 +1054,7 @@ class HelpDeskLogic {
                                 priority: newPriority,
                                 escalatedToTeam: body.escalatedToTeam,
                                 assignedTo: body.assignedTo,
-                                escalatedBy: authUser.userID,
+                                escalatedBy: authUser.name,
                                 escalationReason: String(body.reason).trim(),
                                 escalatedAt,
                                 slaTargetAt,
@@ -1399,6 +1399,202 @@ class HelpDeskLogic {
         );
     }
 
+static respondToEscalatedTicket(authUser, body, callback) {
+    async.waterfall(
+        [
+            // 1) Auth + validation
+            function (done) {
+                if (!authUser || Utils.isEmpty(authUser.userID)) {
+                    return done({ message: "Unauthorized", status: Consts.httpCodeUnauthorized });
+                }
+
+                if (Utils.isEmpty(body.ticketID)) {
+                    return done({ message: "ticketID is required", status: Consts.httpCodeBadRequest });
+                }
+
+                if (Utils.isEmpty(body.responseType)) {
+                    return done({ message: "responseType is required", status: Consts.httpCodeBadRequest });
+                }
+
+                if (!["guidance", "resolve", "clarification"].includes(body.responseType)) {
+                    return done({ message: "Invalid responseType", status: Consts.httpCodeBadRequest });
+                }
+
+                if (Utils.isEmpty(body.message)) {
+                    return done({ message: "response message is required", status: Consts.httpCodeBadRequest });
+                }
+
+                done(null);
+            },
+
+            // 2) Fetch ticket
+            function (done) {
+                DatabaseManager.helpdesk.findOne({
+                    where: { ticketID: body.ticketID }
+                })
+                .then(ticket => {
+                    if (!ticket) {
+                        return done({ message: "Ticket not found", status: Consts.httpCodeFileNotFound });
+                    }
+                    done(null, ticket);
+                })
+                .catch(err => done({ message: "Failed to fetch ticket", status: Consts.httpCodeServerError, error: err }));
+            },
+
+            // 3) Validate escalation state + permission
+            function (ticket, done) {
+                if (ticket.status !== "escalated") {
+                    return done({
+                        message: "Only escalated tickets can receive responses",
+                        status: Consts.httpCodeBadRequest,
+                    });
+                }
+
+                // better aligned: must be assignedTo OR escalatedToTeam member (future-proof)
+                if (ticket.assignedTo !== authUser.userID) {
+                    return done({
+                        message: "Only the escalated assignee can respond",
+                        status: Consts.httpCodeForbidden,
+                    });
+                }
+
+                done(null, ticket);
+            },
+
+            // 4) Save response
+            function (ticket, done) {
+                DatabaseManager.sequelize.transaction(async (transaction) => {
+
+                    const isResolution = body.responseType === "resolve";
+
+                    const response = {
+                        ticketID: ticket.ticketID,
+                        respondedBy: authUser.userID,
+                        responseType: body.responseType,
+                        message: body.message,
+                        statusAfterResponse: isResolution ? "resolved" : "escalated",
+                        isResolution: isResolution,
+                    };
+
+                    const created = await DatabaseManager.ticketEscalationResponse.create(
+                        response,
+                        { transaction }
+                    );
+
+                    let updates = {};
+
+                    if (isResolution) {
+                        updates = {
+                            status: "resolved",
+                            resolutionDetails: body.message,
+                            resolutionDate: new Date(),
+                        };
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        await DatabaseManager.helpdesk.update(updates, {
+                            where: { ticketID: ticket.ticketID },
+                            transaction,
+                        });
+                    }
+
+                    await AuditService.log({
+                        ticketID: ticket.ticketID,
+                        action: "ESCALATION_RESPONSE",
+                        performedBy: authUser.userID,
+                        fieldName: "responseType",
+                        previousValue: null,
+                        newValue: body.responseType,
+                        reason: body.message,
+                    }, { transaction });
+
+                    return created;
+                })
+                .then(result => done(null, result))
+                .catch(err =>
+                    done({
+                        message: err.message || "Failed to respond",
+                        status: Consts.httpCodeServerError,
+                        error: err
+                    })
+                );
+            }
+        ],
+        function (err, response) {
+            if (err) {
+                return callback({
+                    status: err.status,
+                    message: err.message,
+                    error: err.error
+                });
+            }
+
+            callback({
+                status: Consts.httpCodeSuccess,
+                message: "Escalation response recorded successfully",
+                response
+            });
+        }
+    );
+}
+
+static getTicketByID(authUser, ticketID, callback) {
+  async.waterfall([
+    function (done) {
+      if (!authUser?.userID) {
+        return done({ message: "Unauthorized", status: 401 });
+      }
+
+      if (!ticketID) {
+        return done({ message: "ticketID required", status: 400 });
+      }
+
+      done(null);
+    },
+
+    function (done) {
+        DatabaseManager.helpdesk
+        .findOne({
+            where: { ticketID },
+            include: [
+            { model: DatabaseManager.user, as: "requester" },
+            { model: DatabaseManager.user, as: "agent" },
+
+            // ✅ ADD THIS
+            {
+                model: DatabaseManager.ticketEscalationResponse,
+                as: "escalationResponses",
+                include: [
+                {
+                    model: DatabaseManager.user,
+                    as: "responder"
+                }
+                ]
+            }
+            ]
+        })
+        .then(ticket => {
+          if (!ticket) {
+            return done({ message: "Ticket not found", status: 404 });
+          }
+
+          done(null, ticket);
+        })
+        .catch(err =>
+          done({ message: "Fetch failed", status: 500, error: err })
+        );
+    }
+  ], function (err, ticket) {
+    if (err) {
+      return callback(err);
+    }
+
+    callback({
+      status: 200,
+      ticket
+    });
+  });
+}
 }
 
 export default HelpDeskLogic;    

@@ -652,9 +652,15 @@ export default {
           <small class="text-muted">Manage Guest Visits, roles and status</small>
         </div>
 
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#preRegisterModal">
-          PreRegister Guest
-        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#preRegisterModal">
+            PreRegister Guest
+          </button>
+
+          <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#walkInGuestModal">
+            Add Walk-In Guest
+          </button>
+        </div>
       </div>
       <div class="card-body border-bottom bg-light">
         <div class="row g-3 align-items-end">
@@ -1048,7 +1054,14 @@ export default {
       aria-hidden="true"
     >
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <PreRegisterForm @guest-preRegistered="handleGuest" />
+        <PreRegisterForm @guest-pre-registered="handleGuest" />
+      </div>
+    </div>
+
+        <!-- WalkIn Guest modal -->
+    <div class="modal modal-blur fade" id="walkInGuestModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <PreRegisterForm mode="walkIn" @guest-pre-registered="handleWalkInGuest" />
       </div>
     </div>
 

@@ -11,6 +11,7 @@ import GuestVisit from '../models/GuestVisits.js';
 import GuestVisitApproval from "../models/GuestVisitApprovals.js";
 import VisitorBadge from "../models/VisitorBadges.js";
 import ReceptionDesk from "../models/ReceptionistDesks.js";
+import TicketEscalationResponse from "../models/TicketEscalationResponse.js";
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ class DatabaseManager {
     this.visitorBadge = null;
     this.guestVisitApproval = null;
     this.receptionDesk = null;
+    this.ticketEscalationResponse = null;
   }
 
   connect(callback) {
@@ -71,7 +73,7 @@ class DatabaseManager {
       this.guestVisitApproval = GuestVisitApproval.init(this.sequelize);
       this.visitorBadge = VisitorBadge.init(this.sequelize);
       this.receptionDesk = ReceptionDesk.init(this.sequelize);
-
+      this.ticketEscalationResponse = TicketEscalationResponse.init(this.sequelize);
       this.createRelationships();
 
       this.sequelize
@@ -378,6 +380,36 @@ class DatabaseManager {
       this.user.hasMany(this.receptionDesk, {
           foreignKey: "receptionistUserID",
           as: "assignedReceptionDesks",
+      });
+
+      // HelpDesk -> TicketEscalationResponse
+      this.helpdesk.hasMany(this.ticketEscalationResponse, {
+        as: "escalationResponses",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      // TicketEscalationResponse -> HelpDesk
+      this.ticketEscalationResponse.belongsTo(this.helpdesk, {
+        as: "ticket",
+        foreignKey: { name: "ticketID", allowNull: false },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.user.hasMany(this.ticketEscalationResponse, {
+        as: "escalationResponses",
+        foreignKey: { name: "respondedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
+      });
+
+      this.ticketEscalationResponse.belongsTo(this.user, {
+        as: "responder",
+        foreignKey: { name: "respondedBy", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
       });
     } catch (error) {
       console.error("Error in createRelationships method:", error);

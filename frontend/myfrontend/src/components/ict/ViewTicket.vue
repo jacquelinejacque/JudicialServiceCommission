@@ -44,8 +44,10 @@ export default {
     },
 
     canAddNotes() {
+      const allowedStatuses = ['open', 'escalated']
+
       return (
-        this.ticket?.status === 'open' &&
+        allowedStatuses.includes(this.ticket?.status) &&
         (this.isAdmin || this.isAssignedAgent)
       )
     },
@@ -59,6 +61,34 @@ export default {
 
     canCloseTicket() {
       return this.isAdmin && this.ticket?.status === 'resolved'
+    },
+
+    ticketTimeline() {
+      const notes = this.ticketNotes.map(n => ({
+        type: 'note',
+        data: n,
+        time: new Date(n.createdAt)
+      }))
+
+      if (this.ticket?.status === 'escalated') {
+        notes.push({
+          type: 'escalation',
+          data: {
+            user: this.ticket.escalator || {
+              name: this.ticket.escalatedByName || 'Unknown',
+              role: 'Admin'
+            },
+            escalationReason: this.ticket.escalationReason,
+            escalatedToTeam: this.ticket.escalatedToTeam,
+            escalatedBy: this.ticket.escalatedBy,
+            assignedTo: this.ticket.agent,
+            escalatedAt: this.ticket.escalatedAt
+          },
+          time: new Date(this.ticket.escalatedAt)
+        })
+      }
+
+      return notes.sort((a, b) => a.time - b.time)
     }
   },
   mounted() {
@@ -84,36 +114,28 @@ export default {
 
       try {
         const [ticketResponse, notesResponse] = await Promise.all([
-          fetch(`${Const.BASE_URL}/helpDesk/list?ticketID=${this.ticketID}`, {
-            method: 'GET',
-            headers: {
-              'access-token': localStorage.getItem('accessToken')
-            }
+          fetch(`${Const.BASE_URL}/helpDesk/${this.ticketID}`, {
+            headers: { 'access-token': localStorage.getItem('accessToken') }
           }),
           fetch(`${Const.BASE_URL}/ticketNotes/list/${this.ticketID}`, {
-            method: 'GET',
-            headers: {
-              'access-token': localStorage.getItem('accessToken')
-            }
+            headers: { 'access-token': localStorage.getItem('accessToken') }
           })
         ])
 
         const ticketResult = await ticketResponse.json()
         const notesResult = await notesResponse.json()
 
-        if (!ticketResponse.ok || ticketResult.status !== 200) {
-          throw new Error(ticketResult.message || 'Failed to fetch ticket details')
-        }
+        this.ticket = ticketResult.ticket || {}
 
-        if (!notesResponse.ok || notesResult.status !== 200) {
-          throw new Error(notesResult.message || 'Failed to fetch ticket notes')
-        }
+        this.ticketNotes = Array.isArray(notesResult.notes)
+          ? notesResult.notes.filter(n => n?.note)
+          : []
 
-        this.ticket = ticketResult.tickets?.[0] || notesResult.ticket || null
-        this.ticketNotes = notesResult.notes || []
+        // 🔥 force UI refresh safety
+        this.$forceUpdate()
+
       } catch (err) {
-        console.error('Failed to fetch ticket details:', err)
-        this.showToast(err.message || 'Failed to fetch ticket details', true)
+        this.showToast(err.message, true)
       } finally {
         this.loading = false
         this.notesLoading = false
@@ -147,15 +169,27 @@ export default {
       modal.show()
     },
 
-    handleTicketAssigning() {
-      const modalEl = document.getElementById('assignTicketModal')
-      const modal = new Modal(modalEl)
-      if (modal) {
-        modal.hide()
+    cleanupModal(modalId) {
+      const modalEl = document.getElementById(modalId)
+      if (!modalEl) return
+
+      const modalInstance = Modal.getInstance(modalEl)
+      if (modalInstance) {
+        modalInstance.hide()
       }
+
+      document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
+      document.body.classList.remove('modal-open')
+      document.body.style.removeProperty('padding-right')
+    },
+
+    handleTicketAssigning() {
+      this.cleanupModal('assignTicketModal')
 
       this.selectedTicket = null
       this.actionMode = null
+
+      // force full refresh of ticket state
       this.loadTicketDetails()
     }
   }
@@ -274,44 +308,120 @@ export default {
         </div>
 
         <div class="card-body">
+
           <div v-if="notesLoading" class="text-muted">
             Loading notes...
           </div>
 
-          <div v-else-if="!ticketNotes.length" class="text-muted">
+          <div v-else-if="ticketTimeline.filter(i => i.type === 'note').length === 0" class="text-muted">
             No notes have been added to this ticket yet.
           </div>
 
           <div v-else class="d-flex flex-column gap-3">
+
             <div
-              v-for="note in ticketNotes"
-              :key="note.noteID"
-              class="border rounded p-3 bg-light"
+              v-for="item in ticketTimeline"
+              :key="item.time"
             >
-              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                <div>
-                  <strong>{{ note.author?.name || 'Support' }}</strong>
-                  <span class="badge bg-success text-white ms-2">{{ getAuthorRole(note) }}</span>
+
+              <!-- NORMAL NOTE -->
+              <div
+                v-if="item.type === 'note'"
+                class="border rounded p-3 bg-light"
+              >
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                  <div>
+                    <strong>{{ item.data.author?.name || 'Support' }}</strong>
+                    <span class="badge bg-success text-white ms-2">
+                      {{ getAuthorRole(item.data) }}
+                    </span>
+                  </div>
+
+                  <small class="text-muted">
+                    {{ new Date(item.time).toLocaleString() }}
+                  </small>
                 </div>
-                <small class="text-muted">
-                  {{ note.createdAt ? new Date(note.createdAt).toLocaleString() : '_' }}
-                </small>
+
+                <p class="mb-2">{{ item.data.note || '_' }}</p>
+
+                <div v-if="item.data.attachment || item.data.attachmentUrl">
+                  <a
+                    :href="item.data.attachmentUrl || getAttachmentUrl(item.data.attachment)"
+                    target="_blank"
+                    class="btn btn-sm btn-outline-secondary"
+                  >
+                    View Attachment
+                  </a>
+                </div>
               </div>
 
-              <p class="mb-2">{{ note.note || '_' }}</p>
+<div
+  v-else-if="item.type === 'escalation'"
+  class="border rounded p-3 bg-light"
+>
+  <!-- Escalation Header -->
+  <div class="d-flex justify-content-between mb-2">
+    <div>
+      <strong>{{ item.data.escalatedBy }}</strong>
+      <span class="badge bg-danger text-white ms-2">
+        {{ item.data.user?.role || 'Admin' }}
+      </span>
+    </div>
 
-              <div v-if="note.attachment || note.attachmentUrl">
-                <a
-                  :href="note.attachmentUrl || getAttachmentUrl(note.attachment)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="btn btn-sm btn-outline-secondary"
-                >
-                  View Attachment: {{ getFileName(note.attachmentUrl || note.attachment) }}
-                </a>
-              </div>
+    <small class="text-muted">
+      {{ new Date(item.time).toLocaleString() }}
+    </small>
+  </div>
+
+  <!-- Escalation Reason -->
+  <p class="mb-2">
+    {{ item.data.escalationReason }}
+  </p>
+
+  <div class="small text-muted mb-3">
+    <div>
+      <strong>Escalated To Team:</strong>
+      {{ item.data.escalatedToTeam }}
+    </div>
+
+    <div>
+      <strong>Escalated To:</strong>
+      {{ item.data.assignedTo?.name || '_' }}
+    </div>
+  </div>
+
+  <!-- 🔥 ESCALATION RESPONSES -->
+  <div v-if="ticket?.escalationResponses?.length" class="mt-3 border-top pt-3">
+
+    <div
+      v-for="response in ticket.escalationResponses"
+      :key="response.responseID"
+      class="border rounded p-3 bg-white mb-2"
+    >
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <div>
+          <strong>{{ response.responder?.name || 'Support' }}</strong>
+          <span class="badge bg-primary text-white ms-2">
+            {{ response.responder?.role || 'Agent' }}
+          </span>
+        </div>
+
+        <small class="text-muted">
+          {{ new Date(response.createdAt).toLocaleString() }}
+        </small>
+      </div>
+
+      <p class="mb-0">
+        {{ response.message }}
+      </p>
+    </div>
+
+  </div>
+</div>
+
             </div>
           </div>
+          
         </div>
       </div>
     </template>

@@ -202,8 +202,8 @@ static list(param, callback) {
         filteredQuery.team = String(param.team).trim();
     }
 
-    console.log("USER LIST PARAMS:", param);
-    console.log("FILTERED QUERY:", filteredQuery);
+    // console.log("USER LIST PARAMS:", param);
+    // console.log("FILTERED QUERY:", filteredQuery);
 
     if (!Utils.isEmpty(param["search[value]"])) {
         const searchValue = param["search[value]"];
