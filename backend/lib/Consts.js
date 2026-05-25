@@ -4,6 +4,7 @@ export const Consts = {
     httpCodeServerError: 500,
     httpCodeAuthError: 503,
     unAuthorized: 403,
+    httpCodeBadRequest: 400,
 
 
 };

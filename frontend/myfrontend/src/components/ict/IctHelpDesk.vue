@@ -306,7 +306,7 @@ export default {
 </script>
 
 <template>
-  <div class="container-xxl py-3">
+  <div class="container-fluid px-3 py-4">
     <div class="card shadow-sm">
       <div class="card-header d-flex align-items-center justify-content-between">
         <div>

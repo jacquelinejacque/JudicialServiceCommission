@@ -28,7 +28,7 @@ class GuestVisitsLogic {
                         "officialMeeting",
                         "vendor",
                         "contractor",
-                        "interviewee",
+                        "interview",
                         "delivery",
                         "walkIn",
                         "personalVisit",
@@ -324,24 +324,23 @@ class GuestVisitsLogic {
                 },
 
                 function (receptionistUser, receptionDesk, done) {
-                    const todayStart = new Date();
-                    todayStart.setHours(0, 0, 0, 0);
-
-                    const todayEnd = new Date();
-                    todayEnd.setHours(23, 59, 59, 999);
+                    const whereCondition = body.visitID
+                        ? {
+                            visitID: body.visitID,
+                            status: {
+                                [Op.in]: ["preRegistered", "approved", "pendingApproval", "checkedIn"]
+                            }
+                        }
+                        : {
+                            idNumber: body.idNumber,
+                            status: {
+                                [Op.in]: ["preRegistered", "approved", "pendingApproval", "checkedIn"]
+                            }
+                        };
 
                     DatabaseManager.guestVisit
                         .findOne({
-                            where: {
-                                idNumber: body.idNumber,
-                                status: {
-                                    [Op.in]: ["preRegistered", "approved", "pendingApproval", "checkedIn"]
-                                },
-                                createdAt: {
-                                    [Op.gte]: todayStart,
-                                    [Op.lte]: todayEnd
-                                }
-                            },
+                            where: whereCondition,
                             include: [
                                 {
                                     model: DatabaseManager.user,
@@ -720,6 +719,16 @@ class GuestVisitsLogic {
 
                 if (result.flow === "checkin-preregistered") {
                     message = "Guest checked in successfully";
+                }
+                if (result.flow === "rejected") {
+                    return callback({
+                        status: Consts.httpCodeBadRequest || 400,
+                        message: "Guest rejected due to mismatch with pre-registered details",
+                        error: "Rejected at check-in due to detail mismatch",
+                        guestVisit: guestVisit,
+                        badge: null,
+                        smsStatus: result.smsStatus || null,
+                    });
                 }
 
                 return callback({

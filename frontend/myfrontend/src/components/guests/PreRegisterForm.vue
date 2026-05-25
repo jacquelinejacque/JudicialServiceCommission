@@ -19,9 +19,7 @@ export default {
             expectedArrival: '',
             expectedDeparture: '',
             receptionDeskID: '',
-            receptionistDesk: '',
             hostUserID: '',
-            remarks: '',
             hostUsers: [],
             loadingHostUsers: false,
         },
@@ -36,25 +34,52 @@ export default {
       if (this.isWalkIn) {
         this.fetchHostUsers()
       }
+      if (this.prefillData) {
+        this.formData = { ...this.formData, ...this.prefillData }
+      }
     },
     computed: {
-    isWalkIn() {
-        return this.mode === 'walkIn'
-    },
+      isWalkIn() {
+          return this.mode === 'walkIn'
+      },
+      isCheckInPreRegistered() {
+        return this.mode === 'checkInPreRegistered'
+      },
 
-    modalTitle() {
-        return this.isWalkIn ? 'Add Walk-In Guest' : 'Pre-register Guest'
-    },
+      modalTitle() {
+        if (this.isWalkIn) return 'Add Walk-In Guest'
+        if (this.isCheckInPreRegistered) return 'Check-In Guest'
+        return 'Pre-register Guest'
+      },
 
-    submitText() {
-        return this.isWalkIn ? 'Save Walk-In Guest' : 'Pre-register Guest'
-    }
+      submitText() {
+        if (this.isWalkIn) return 'Save Walk-In Guest'
+        if (this.isCheckInPreRegistered) return 'Check-In Guest'
+        return 'Pre-register Guest'
+      }
     },
     props: {
         mode: {
             type: String,
             default: 'preRegister'
+        },
+        prefillData: { type: Object, default: null }
+    },
+    watch: {
+      prefillData: {
+        immediate: true,
+        deep: true,
+        handler(value) {
+          if (value) {
+            this.formData = {
+              ...this.formData,
+              ...value,
+              timeIn: value.timeIn || 60,
+              remarks: ''
+            }
+          }
         }
+      }
     },
   methods: {
     showToast(message, isDanger = false) {
@@ -67,23 +92,68 @@ export default {
     },
 
     validateForm() {
-        const requiredFields = this.isWalkIn
-            ? ['guestName', 'phone', 'idType', 'idNumber', 'purpose', 'department', 'receptionistDesk', 'hostUserID']
-            : ['guestName', 'phone', 'idType', 'idNumber', 'purpose', 'department', 'visitCategory', 'expectedArrival', 'expectedDeparture', 'receptionDeskID']
+      let requiredFields = []
 
-        for (const field of requiredFields) {
-            if (!this.formData[field]) {
-            this.showToast(`${field.replace(/([A-Z])/g, ' $1')} is required.`, true)
-            return false
-            }
+      if (this.isWalkIn) {
+        requiredFields = [
+          'guestName',
+          'phone',
+          'idType',
+          'idNumber',
+          'purpose',
+          'department',
+          'receptionDeskID',
+          'hostUserID'
+        ]
+      } else if (this.isCheckInPreRegistered) {
+        requiredFields = [
+          'guestName',
+          'phone',
+          'idType',
+          'idNumber',
+          'receptionDeskID',
+          'timeIn'
+        ]
+      } else {
+        requiredFields = [
+          'guestName',
+          'phone',
+          'idType',
+          'idNumber',
+          'purpose',
+          'department',
+          'visitCategory',
+          'expectedArrival',
+          'expectedDeparture',
+          'receptionDeskID'
+        ]
+      }
+
+      for (const field of requiredFields) {
+        if (!this.formData[field]) {
+          this.showToast(`${field.replace(/([A-Z])/g, ' $1')} is required.`, true)
+          return false
         }
+      }
 
-        if (!this.isWalkIn && new Date(this.formData.expectedDeparture) <= new Date(this.formData.expectedArrival)) {
-            this.showToast('Expected departure must be after expected arrival.', true)
-            return false
-        }
+      if (
+        !this.isWalkIn &&
+        !this.isCheckInPreRegistered &&
+        new Date(this.formData.expectedDeparture) <= new Date(this.formData.expectedArrival)
+      ) {
+        this.showToast('Expected departure must be after expected arrival.', true)
+        return false
+      }
 
-        return true
+      if (
+        this.isCheckInPreRegistered &&
+        (isNaN(this.formData.timeIn) || parseInt(this.formData.timeIn) <= 0)
+      ) {
+        this.showToast('Visit duration must be a valid positive number of minutes.', true)
+        return false
+      }
+
+      return true
     },
 
     async handleSubmit() {
@@ -92,12 +162,18 @@ export default {
 
         this.loading = true
 
-        const url = this.isWalkIn
-        ? `${Const.BASE_URL}/guestsVisits/walkIn`
-        : `${Const.BASE_URL}/guestsVisits/preRegister`
+        let url = ''
 
-        const payload = this.isWalkIn
-        ? {
+        if (this.isWalkIn || this.isCheckInPreRegistered) {
+          url = `${Const.BASE_URL}/guestsVisits/checkIn`
+        } else {
+          url = `${Const.BASE_URL}/guestsVisits/preRegister`
+        }
+
+        let payload = {}
+
+        if (this.isWalkIn) {
+          payload = {
             guestName: this.formData.guestName,
             phone: this.formData.phone,
             email: this.formData.email || null,
@@ -106,11 +182,28 @@ export default {
             organization: this.formData.organization || null,
             purpose: this.formData.purpose,
             department: this.formData.department,
-            receptionistDesk: this.formData.receptionistDesk,
+            receptionDeskID: this.formData.receptionDeskID,
             hostUserID: this.formData.hostUserID,
-            remarks: this.formData.remarks || null
-            }
-        : {
+          }
+        }
+        else if (this.isCheckInPreRegistered) {
+          payload = {
+            visitID: this.formData.visitID,
+            guestName: this.formData.guestName,
+            phone: this.formData.phone,
+            email: this.formData.email || null,
+            idType: this.formData.idType,
+            idNumber: this.formData.idNumber,
+            organization: this.formData.organization || null,
+            purpose: this.formData.purpose,
+            department: this.formData.department,
+            receptionDeskID: this.formData.receptionDeskID,
+            timeIn: this.formData.timeIn || 60,
+            remarks: this.formData.remarks || ''
+          }
+        }
+        else {
+          payload = {
             guestName: this.formData.guestName,
             phone: this.formData.phone,
             email: this.formData.email || null,
@@ -123,8 +216,8 @@ export default {
             expectedArrival: new Date(this.formData.expectedArrival).toISOString(),
             expectedDeparture: new Date(this.formData.expectedDeparture).toISOString(),
             receptionDeskID: this.formData.receptionDeskID
-            }
-
+          }
+        }
         const res = await axios.post(url, payload, {
         headers: {
             'access-token': localStorage.getItem('accessToken'),
@@ -137,20 +230,23 @@ export default {
         if (res.data?.status === 200 || res.data?.status === 201) {
           this.showToast(message, false)
           this.resetForm()
-          this.$emit('guest-pre-registered')
+          this.$emit('guest-saved', this.mode)
         } else {
-          this.showToast(message, true)
+          this.showToast(res.data?.error || res.data?.message || 'Request failed', true)
         }
-      } catch (error) {
-        console.error('Error:', error.response?.data || error.message)
+        } catch (error) {
+          console.error('FULL API ERROR:', error.response?.data || error.message)
 
-        const message =
-          error.response?.data?.message ||
-          error.message ||
-          'Failed to pre-register guest'
+          const apiError = error.response?.data
 
-        this.showToast(message, true)
-      } finally {
+          const message =
+            apiError?.error ||
+            apiError?.message ||
+            error.message ||
+            'Failed to pre-register guest'
+
+          this.showToast(message, true)
+        }finally {
         this.loading = false
       }
     },
@@ -268,13 +364,9 @@ export default {
               />
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered">
               <label class="form-label">Email</label>
-              <input
-                type="email"
-                class="form-control"
-                v-model="formData.email"
-              />
+              <input type="email" class="form-control" v-model="formData.email" />
             </div>
 
             <div class="col-md-6 mb-3">
@@ -296,16 +388,12 @@ export default {
               />
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered">
               <label class="form-label">Organization</label>
-              <input
-                type="text"
-                class="form-control"
-                v-model="formData.organization"
-              />
+              <input type="text" class="form-control" v-model="formData.organization" />
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered">
               <label class="form-label">Department</label>
                 <select class="form-control" v-model="formData.department">
                 <option value="">Select Department</option>
@@ -325,7 +413,7 @@ export default {
                 </select>
             </div> 
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isWalkIn && !isCheckInPreRegistered">
               <label class="form-label">Visit Category</label>
                 <select class="form-control" v-model="formData.visitCategory">
                 <option value="">Select Category</option>
@@ -339,7 +427,7 @@ export default {
                 </select>
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered && !isWalkIn">
               <label class="form-label">Expected Arrival</label>
               <input
                 type="datetime-local"
@@ -348,7 +436,7 @@ export default {
               />
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered && !isWalkIn">
               <label class="form-label">Expected Departure</label>
               <input
                 type="datetime-local"
@@ -373,7 +461,7 @@ export default {
             </select>
             </div>
 
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" v-if="!isCheckInPreRegistered">
               <label class="form-label">Purpose</label>
               <textarea
                 class="form-control"
@@ -382,7 +470,10 @@ export default {
               ></textarea>
             </div>
 
-
+            <div class="col-md-6 mb-3" v-if="isCheckInPreRegistered">
+              <label class="form-label">Visit Duration (minutes)</label>
+              <input type="number" class="form-control" v-model="formData.timeIn" />
+            </div>
             <div class="col-md-6 mb-3" v-if="isWalkIn">
               <label class="form-label">Host User</label>
               <select
@@ -402,11 +493,6 @@ export default {
                   {{ user.name }}
                 </option>
               </select>
-            </div>
-
-            <div class="col-md-12 mb-3" v-if="isWalkIn">
-                <label class="form-label">Remarks</label>
-                <textarea class="form-control" rows="2" v-model="formData.remarks"></textarea>
             </div>
 
           </div>

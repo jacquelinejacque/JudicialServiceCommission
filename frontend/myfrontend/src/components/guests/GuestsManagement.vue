@@ -3,11 +3,12 @@
 import DataTable from 'datatables.net-vue3'
 import { Const } from '../../utils/constants'
 import DataTableBs5 from 'datatables.net-bs5'
-//import EditRecordForm from './EditRecordForm.vue'
+import ApproveGuest from './ApproveGuest.vue'
 import PreRegisterForm from './PreRegisterForm.vue'
 import Toastify from 'toastify-js'
 import axios from 'axios'
 import { Modal } from 'bootstrap'
+import CheckOut from './CheckOut.vue'
 //import RecordActions from './RecordActions.vue'
 DataTable.use(DataTableBs5)
 
@@ -15,7 +16,8 @@ export default {
   components: {
     DataTable,
     PreRegisterForm,
-//    EditRecordForm,
+    ApproveGuest,
+    CheckOut,
 //    RecordActions,
   },
 
@@ -30,6 +32,9 @@ export default {
       complainantNameSearchTimeout: null,
       legalTeamUsers: [],
       exportingReports: false,
+      selectedApprovalVisitID: null,
+      selectedCheckOutVisitID: null,
+      approvalModal: null,
       filters: {
         stage: '',
         title: '',
@@ -98,6 +103,7 @@ export default {
         { title: 'Visit Duration', data: 'timeIn' },
         { title: 'Check-In Time', data: 'checkInTime', render: (data) => this.formatDate(data)  },
         { title: 'Check-Out Time', data: 'checkOutTime', render: (data) => this.formatDate(data)  },
+        { title: 'Status', data: 'status' },
         { title: 'Action', data: null, render: '#action' }
         ]
     }
@@ -115,17 +121,71 @@ export default {
         ? this.selectedAction.replaceAll('_', ' ')
         : ''
     },
-    isRegistrar() {
-      return this.currentUser?.role?.toLowerCase() === 'registrar'
+    isNormalUser() {
+      return this.currentUser?.role === 'normalUser'
     },
-    isDirectorLegal() {
-      return this.currentUser?.role?.toLowerCase() === 'directorlegal'
+    isAdmin() {
+      return this.currentUser?.role === 'admin'
     },
-    isLegalTeam() {
-      return this.currentUser?.role?.toLowerCase() === 'legalteam'
+    isReceptionist() {
+      return this.currentUser?.role === 'receptionist'
     }
   },
   methods: {
+    openCheckOutModal(record) {
+      this.selectedCheckOutVisitID = record.visitID
+
+      const modalEl = document.getElementById('checkOutModal')
+      const modal = Modal.getInstance(modalEl) || new Modal(modalEl)
+      modal.show()
+    },
+
+    handleCheckOutCompleted() {
+      const modalEl = document.getElementById('checkOutModal')
+      const modal = Modal.getInstance(modalEl) || new Modal(modalEl)
+      modal.hide()
+
+      modalEl.addEventListener(
+        'hidden.bs.modal',
+        () => {
+          document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
+          document.body.classList.remove('modal-open')
+          document.body.style.removeProperty('padding-right')
+        },
+        { once: true }
+      )
+
+      if (this.$refs.table && this.$refs.table.dt) {
+        this.$refs.table.dt.ajax.reload(null, false)
+      }
+    },
+    openApproveGuestModal(record) {
+      this.selectedApprovalVisitID = record.visitID
+
+      const modalEl = document.getElementById('approveGuestModal')
+      const modal = Modal.getInstance(modalEl) || new Modal(modalEl)
+      modal.show()
+    },
+
+    handleApprovalCompleted() {
+      const modalEl = document.getElementById('approveGuestModal')
+      const modal = Modal.getInstance(modalEl) || new Modal(modalEl)
+      modal.hide()
+
+      modalEl.addEventListener(
+        'hidden.bs.modal',
+        () => {
+          document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
+          document.body.classList.remove('modal-open')
+          document.body.style.removeProperty('padding-right')
+        },
+        { once: true }
+      )
+
+      if (this.$refs.table && this.$refs.table.dt) {
+        this.$refs.table.dt.ajax.reload(null, false)
+      }
+    },
     applyFilters() {
       if (this.$refs.table && this.$refs.table.dt) {
         this.$refs.table.dt.ajax.reload(null, true)
@@ -280,9 +340,11 @@ export default {
 
       return `${day}/${month}/${year}`
     },
-    async getRecords() {
-      this.dt = this.$refs.table.dt
-      this.dt.ajax.reload(null, false)
+    openCheckInModal(record) {
+      this.selectedGuest = { ...record }
+
+      const modal = new Modal(document.getElementById('checkInModal'))
+      modal.show()
     },
 
     showToast(message, isDanger) {
@@ -306,9 +368,15 @@ export default {
       this.selectedRecordId = recordId
       console.log('Selected record Id:', this.selectedRecordId)
     },
+    handleGuestSaved(mode) {
+      const modalId =
+        mode === 'walkIn'
+          ? 'walkInGuestModal'
+          : mode === 'checkInPreRegistered'
+            ? 'checkInModal'
+            : 'preRegisterModal'
 
-    handleGuest() {
-      const modalEl = document.getElementById('preRegisterModal')
+      const modalEl = document.getElementById(modalId)
 
       if (modalEl) {
         const modalInstance = Modal.getInstance(modalEl) || new Modal(modalEl)
@@ -319,6 +387,7 @@ export default {
           () => {
             document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
             document.body.classList.remove('modal-open')
+            document.body.style.removeProperty('padding-right')
           },
           { once: true }
         )
@@ -326,8 +395,6 @@ export default {
 
       if (this.$refs.table && this.$refs.table.dt) {
         this.$refs.table.dt.ajax.reload(null, false)
-      } else {
-        console.error('DataTable reference is missing.')
       }
     },
     viewRecord(record) {
@@ -640,7 +707,7 @@ export default {
 </script>
 
 <template>
-  <div class="container-xxl py-4">
+  <div class="container-fluid px-3 py-4">
 
     <!-- Card -->
     <div class="card shadow-sm">
@@ -885,6 +952,37 @@ export default {
                   View
                 </a>
               </li>
+
+              <li v-if="props.rowData.status === 'preRegistered'">
+                <a
+                  href="#"
+                  class="dropdown-item text-success"
+                  @click.prevent="openCheckInModal(props.rowData)"
+                >
+                  Check-In Guest
+                </a>
+              </li>
+              <li
+                v-if="(isNormalUser || isAdmin) && (props.rowData.status === 'rejected' || props.rowData.status === 'pendingApproval')"
+              >
+                <a
+                  href="#"
+                  class="dropdown-item text-success"
+                  @click.prevent="openApproveGuestModal(props.rowData)"
+                >
+                  Give Approval
+                </a>
+              </li>
+
+              <li v-if="(isAdmin || isReceptionist) && props.rowData.status === 'checkedIn'">
+                <a
+                  href="#"
+                  class="dropdown-item text-danger"
+                  @click.prevent="openCheckOutModal(props.rowData)"
+                >
+                  Check Out Guest
+                </a>
+              </li>
               <!-- Edit -->
               <li v-if="props.rowData.status === 'Received'" >
                 <a  
@@ -1054,14 +1152,25 @@ export default {
       aria-hidden="true"
     >
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <PreRegisterForm @guest-pre-registered="handleGuest" />
+        <PreRegisterForm mode="preRegister" @guest-saved="handleGuestSaved" />
       </div>
     </div>
 
         <!-- WalkIn Guest modal -->
     <div class="modal modal-blur fade" id="walkInGuestModal" tabindex="-1">
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <PreRegisterForm mode="walkIn" @guest-pre-registered="handleWalkInGuest" />
+        <PreRegisterForm mode="walkIn" @guest-saved="handleGuestSaved" />
+      </div>
+    </div>
+
+     <!-- CheckIn Pre Registered Guest modal -->
+    <div class="modal modal-blur fade" id="checkInModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <PreRegisterForm
+          mode="checkInPreRegistered"
+          :prefillData="selectedGuest"
+          @guest-saved="handleGuestSaved"
+        />
       </div>
     </div>
 
@@ -1078,17 +1187,25 @@ export default {
       </div>
     </div>
 
-    <div class="modal fade" id="actionModal" tabindex="-1">
+    <div class="modal modal-blur fade" id="approveGuestModal" tabindex="-1">
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <RecordActions
-          v-if="selectedRecord"
-          :record="selectedRecord"
-          :action="selectedAction"
-          @action-completed="handleActionCompleted"
+        <ApproveGuest
+          v-if="selectedApprovalVisitID"
+          :visitID="selectedApprovalVisitID"
+          @approval-completed="handleApprovalCompleted"
         />
       </div>
     </div>
 
+    <div class="modal modal-blur fade" id="checkOutModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <CheckOut
+          v-if="selectedCheckOutVisitID"
+          :visitID="selectedCheckOutVisitID"
+          @checkout-completed="handleCheckOutCompleted"
+        />
+      </div>
+    </div>
   </div>
 </template>
 

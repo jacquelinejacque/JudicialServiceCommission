@@ -641,7 +641,7 @@ export default {
 </script>
 
 <template>
-  <div class="container-xxl py-4">
+  <div class="container-fluid px-3 py-4">
 
     <!-- Card -->
     <div class="card shadow-sm">
