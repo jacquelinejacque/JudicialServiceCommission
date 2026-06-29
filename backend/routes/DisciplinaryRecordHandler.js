@@ -104,9 +104,9 @@ DisciplinaryRecordHandler.get("/exportReports", authenticate, function (req, res
   });
 });
 
-DisciplinaryRecordHandler.post( "/assignToDirectorLegal", authenticate, function (req, res) {
+DisciplinaryRecordHandler.post( "/assignLegalTeam", authenticate, function (req, res) {
     const authUser = req.user;
-    DisciplinaryRecordLogic.assignToDirectorLegal( req.body, authUser, function (result) {
+    DisciplinaryRecordLogic.assignLegalTeam( req.body, authUser, function (result) {
         res.json(result);
       }
     );
@@ -116,6 +116,15 @@ DisciplinaryRecordHandler.post( "/assignToDirectorLegal", authenticate, function
 DisciplinaryRecordHandler.post( "/registerCase", authenticate, function (req, res) {
     const authUser = req.user;
     DisciplinaryRecordLogic.registerCase( req.body, authUser,  function (result) {
+        res.json(result);
+      }
+    );
+  }
+);
+
+DisciplinaryRecordHandler.post( "/assignToHRM", authenticate, function (req, res) {
+    const authUser = req.user;
+    DisciplinaryRecordLogic.assignToHRM( req.body, authUser,  function (result) {
         res.json(result);
       }
     );

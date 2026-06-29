@@ -423,6 +423,46 @@ class EmailService {
             .then(() => callback(null))
             .catch((err) => callback(err));
     }
+
+static sendCaseRegisteredNotificationToDirectorLegal(data, callback) {
+    const {
+        to,
+        directorName,
+        officerName,
+        designation,
+        natureOfCharges,
+        fileNumber,
+        caseAgainst,
+        registeredBy,
+        dateFiled,
+    } = data;
+
+    const subject = `New Disciplinary Case Registered - ${fileNumber}`;
+
+    const html = `
+        <div>
+            <p>Hello ${directorName || "Director Legal"},</p>
+
+            <p>A new disciplinary case has been registered and assigned to you for further action.</p>
+
+            <p><strong>File Number:</strong> ${fileNumber || "_"}</p>
+            <p><strong>Officer Name:</strong> ${officerName || "_"}</p>
+            <p><strong>Designation:</strong> ${designation || "_"}</p>
+            <p><strong>Case Against:</strong> ${caseAgainst || "_"}</p>
+            <p><strong>Nature of Charges:</strong> ${natureOfCharges || "_"}</p>
+            <p><strong>Registered By:</strong> ${registeredBy || "_"}</p>
+            <p><strong>Date Filed:</strong> ${
+                dateFiled ? new Date(dateFiled).toLocaleString() : "_"
+            }</p>
+
+            <p>Please log in to the system and proceed with the next action.</p>
+        </div>
+    `;
+
+    this.sendMail({ to, subject, html })
+        .then(() => callback(null))
+        .catch((err) => callback(err));
+}
 }
 
 

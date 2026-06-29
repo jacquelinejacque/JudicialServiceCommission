@@ -74,15 +74,15 @@ export default {
       try {
         this.loadingUsers = true
 
-        const params = {
-          role: 'agent'
-        }
+        const params = {}
 
-        if ((this.mode === 'assign' || this.mode === 'reassign') && team) {
+        if (this.mode === 'assign' || this.mode === 'reassign') {
+          params.roleName = 'agent'
           params.team = 'JSC'
         }
 
         if (this.mode === 'escalate' && team) {
+          params.roleName = 'admin'
           params.team = team
         }
 
@@ -94,6 +94,7 @@ export default {
         })
 
         const userList = res.data?.data || []
+
         this.users = userList.filter(user => user.status === 'active')
       } catch (error) {
         console.error('Failed to load users:', error)

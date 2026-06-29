@@ -39,4 +39,10 @@ GuestVisitsHandler.post("/checkOut", authenticate, function (req, res) {
     res.json(result);
   });
 });
+
+GuestVisitsHandler.post("/findByID", authenticate, function (req, res) {
+  GuestVisitsLogic.findGuestVisitByID(req.body, req.user, function (result) {
+    res.json(result);
+  });
+});
 export default GuestVisitsHandler;

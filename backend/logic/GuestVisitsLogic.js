@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import DatabaseManager from "../lib/DatabaseManager.js";
 import Utils from "../lib/Utils.js";
 import { Consts } from "../lib/Consts.js";
+import PermissionService from "../lib/PermissionService.js";
 class GuestVisitsLogic {
     static preRegisterGuest(body, loggedInUser, callback) {
         async.waterfall(
@@ -64,16 +65,29 @@ class GuestVisitsLogic {
                                 userID: loggedInUser.userID,
                                 status: "active",
                             },
+                            include: [
+                                {
+                                    model: DatabaseManager.role,
+                                    as: "role",
+                                    attributes: ["roleID", "roleName"],
+                                },
+                            ],
                         })
                         .then((user) => {
-                            if (!user) return done("Logged in user not found");
+                        if (!user) return done("Logged in user not found");
 
-                            if (user.role !== "normalUser" && user.role !== "hostStaff") {
-                                return done("Only staff/host users can pre-register guests");
-                            }
+                        const permissionCheck = PermissionService.authorize(
+                            loggedInUser,
+                            "guest.preregister"
+                        );
 
-                            return done(null, user);
+                        if (!permissionCheck.allowed) {
+                            return done("Only admins and host users can pre-register guests");
+                        }
+
+                        return done(null, user);
                         })
+                        
                         .catch((err) => {
                             return done(err);
                         });
@@ -180,9 +194,14 @@ class GuestVisitsLogic {
                                     {
                                         model: DatabaseManager.receptionDesk,
                                         as: "receptionDesk",
-                                        attributes: ["receptionDeskID", "deskName", "deskCode", "phoneNumber"]
-                                    }
-                                ]
+                                        attributes: [
+                                            "receptionDeskID",
+                                            "deskName",
+                                            "deskCode",
+                                            "phoneNumber",
+                                        ],
+                                    },
+                                ],
                             });
                         })
                         .then((visitWithDesk) => {
@@ -233,11 +252,19 @@ class GuestVisitsLogic {
                     return callback({
                         status: Consts.httpCodeBadRequest || 400,
                         message: "Failed to pre-register guest",
-                        error: err,
+                        error: err?.message || err,
                     });
                 }
 
                 const guestVisit = guestVisitRecord.get({ plain: true });
+
+                guestVisit.receptionDeskName = guestVisit.receptionDesk
+                    ? guestVisit.receptionDesk.deskName
+                    : null;
+
+                guestVisit.receptionDeskCode = guestVisit.receptionDesk
+                    ? guestVisit.receptionDesk.deskCode
+                    : null;
 
                 return callback({
                     status: Consts.httpCodeSuccess,
@@ -288,12 +315,27 @@ class GuestVisitsLogic {
                                 userID: loggedInUser.userID,
                                 status: "active",
                             },
+                            include: [
+                                {
+                                    model: DatabaseManager.role,
+                                    as: "role",
+                                    attributes: ["roleID", "roleName"],
+                                },
+                            ],
                         })
                         .then((user) => {
                             if (!user) return done("Logged in user not found");
 
-                            if (user.role !== "receptionist" && user.role !== "admin") {
-                                return done("Only a receptionist or admin can check in guests");
+                            const permissionCheck = PermissionService.authorize(
+                                loggedInUser,
+                                "guest.checkin"
+                            );
+
+                            if (!permissionCheck.allowed) {
+                                return callback({
+                                status: Consts.unAuthorized,
+                                message: "Only  admins and receptionists can check-in guests",
+                                });
                             }
 
                             return done(null, user);
@@ -345,7 +387,14 @@ class GuestVisitsLogic {
                                 {
                                     model: DatabaseManager.user,
                                     as: "host",
-                                    attributes: ["userID", "name", "email", "phone", "role", "status"]
+                                    attributes: ["userID", "name", "email", "phone", "status"],
+                                    include: [
+                                        {
+                                            model: DatabaseManager.role,
+                                            as: "role",
+                                            attributes: ["roleID", "roleName"],
+                                        },
+                                    ],
                                 },
                                 {
                                     model: DatabaseManager.receptionDesk,
@@ -585,8 +634,8 @@ class GuestVisitsLogic {
                                             where: {
                                                 receptionDeskID: payload.receptionDesk.receptionDeskID,
                                                 checkInTime: {
-                                                    [Op.gte]: new Date(`${dateCode.substring(0,4)}-${dateCode.substring(4,6)}-${dateCode.substring(6,8)}T00:00:00.000Z`),
-                                                    [Op.lt]: new Date(`${dateCode.substring(0,4)}-${dateCode.substring(4,6)}-${dateCode.substring(6,8)}T23:59:59.999Z`)
+                                                    [Op.gte]: new Date(`${dateCode.substring(0, 4)}-${dateCode.substring(4, 6)}-${dateCode.substring(6, 8)}T00:00:00.000Z`),
+                                                    [Op.lt]: new Date(`${dateCode.substring(0, 4)}-${dateCode.substring(4, 6)}-${dateCode.substring(6, 8)}T23:59:59.999Z`)
                                                 },
                                                 passNumber: {
                                                     [Op.ne]: null
@@ -606,42 +655,45 @@ class GuestVisitsLogic {
                                                 order: [["badgeNumber", "ASC"]],
                                                 transaction: transaction
                                             })
-                                            .then((availableBadge) => {
-                                                if (!availableBadge) {
-                                                    return Promise.reject("No available visitor badge at this reception desk");
-                                                }
+                                                .then((availableBadge) => {
+                                                    if (!availableBadge) {
+                                                        return Promise.reject("No available visitor badge at this reception desk");
+                                                    }
 
-                                                return visit.update({
-                                                    checkInTime: payload.checkInTime,
-                                                    timeIn: payload.durationMinutes,
-                                                    expiryTime: payload.expiryTime,
-                                                    receptionDeskID: payload.receptionDesk.receptionDeskID,
-                                                    checkedInBy: payload.receptionistUser.userID,
-                                                    passNumber: passNumber,
-                                                    badgeID: availableBadge.badgeID,
-                                                    badgeNumber: availableBadge.badgeNumber,
-                                                    status: "checkedIn",
-                                                    remarks: body.remarks || visit.remarks,
-                                                }, { transaction: transaction })
-                                                .then((updatedVisit) => {
-                                                    return availableBadge.update({
-                                                        status: "issued",
-                                                        currentVisitID: updatedVisit.visitID,
-                                                        issuedAt: payload.checkInTime,
-                                                        returnedAt: null,
+                                                    return visit.update({
+                                                        checkInTime: payload.checkInTime,
+                                                        timeIn: payload.durationMinutes,
+                                                        expiryTime: payload.expiryTime,
+                                                        receptionDeskID: payload.receptionDesk.receptionDeskID,
+                                                        checkedInBy: payload.receptionistUser.userID,
+                                                        passNumber: passNumber,
+                                                        badgeID: availableBadge.badgeID,
+                                                        badgeNumber: availableBadge.badgeNumber,
+                                                        status: "checkedIn",
+                                                        remarks: body.remarks || visit.remarks,
                                                     }, { transaction: transaction })
-                                                    .then(() => updatedVisit);
+                                                        .then((updatedVisit) => {
+                                                            return availableBadge.update({
+                                                                status: "issued",
+                                                                currentVisitID: updatedVisit.visitID,
+                                                                issuedAt: payload.checkInTime,
+                                                                returnedAt: null,
+                                                            }, { transaction: transaction })
+                                                                .then(() => updatedVisit);
+                                                        });
                                                 });
-                                            });
                                         })
                                         .catch((err) => {
                                             if (
                                                 err &&
-                                                (err.name === "SequelizeUniqueConstraintError" ||
-                                                    `${err}`.includes("unique"))
+                                                (
+                                                    err.name === "SequelizeUniqueConstraintError" ||
+                                                    `${err}`.includes("unique")
+                                                )
                                             ) {
                                                 return tryGeneratePassAndAssignBadge(attempt + 1);
                                             }
+
                                             return Promise.reject(err);
                                         });
                                 };
@@ -651,6 +703,8 @@ class GuestVisitsLogic {
                             .then((updatedVisit) => {
                                 return transaction.commit()
                                     .then(() => {
+                                        transaction = null;
+
                                         return done(null, {
                                             flow: payload.flow,
                                             receptionDesk: payload.receptionDesk,
@@ -682,6 +736,7 @@ class GuestVisitsLogic {
                     return done("Invalid guest check-in flow");
                 },
             ],
+
             function (err, result) {
                 if (err) {
                     return callback({
@@ -692,6 +747,23 @@ class GuestVisitsLogic {
                 }
 
                 const guestVisit = result.guestVisit.get({ plain: true });
+
+                guestVisit.receptionDeskName = result.receptionDesk
+                    ? result.receptionDesk.deskName
+                    : null;
+
+                guestVisit.receptionDeskCode = result.receptionDesk
+                    ? result.receptionDesk.deskCode
+                    : null;
+
+                guestVisit.receptionDesk = result.receptionDesk
+                    ? {
+                        receptionDeskID: result.receptionDesk.receptionDeskID,
+                        deskName: result.receptionDesk.deskName,
+                        deskCode: result.receptionDesk.deskCode,
+                        phoneNumber: result.receptionDesk.phoneNumber
+                    }
+                    : null;
 
                 const badge = result.flow === "checkin-preregistered"
                     ? {
@@ -720,6 +792,7 @@ class GuestVisitsLogic {
                 if (result.flow === "checkin-preregistered") {
                     message = "Guest checked in successfully";
                 }
+
                 if (result.flow === "rejected") {
                     return callback({
                         status: Consts.httpCodeBadRequest || 400,
@@ -859,9 +932,23 @@ class GuestVisitsLogic {
                                 "createdAt",
                                 "updatedAt",
                             ],
+
+                            include: [
+                                {
+                                    model: DatabaseManager.receptionDesk,
+                                    as: "receptionDesk",
+                                    attributes: [
+                                        "receptionDeskID",
+                                        "deskName",
+                                        "deskCode",
+                                        "phoneNumber"
+                                    ]
+                                }
+                            ],
+
                             order: [["createdAt", "DESC"]],
-                            offset: offset,
-                            limit: limit,
+                            offset,
+                            limit,
                         })
                         .then((data) => done(null, totalRecords, filteredRecords, data))
                         .catch((err) => done(err));
@@ -882,7 +969,17 @@ class GuestVisitsLogic {
                 return callback({
                     status: Consts.httpCodeSuccess,
                     message: "Guest Visits fetched successfully",
-                    data: data,
+                    data: data.map((visit) => {
+                        const item = visit.get({ plain: true });
+
+                        item.receptionDeskName =
+                            item.receptionDesk?.deskName || null;
+
+                        item.receptionDeskCode =
+                            item.receptionDesk?.deskCode || null;
+
+                        return item;
+                    }),
                     draw: parseInt(param.draw),
                     recordsTotal: totalRecords,
                     recordsFiltered: filteredRecords,
@@ -890,6 +987,7 @@ class GuestVisitsLogic {
             }
         );
     }
+
 
     static hostApproveGuest(body, loggedInUser, callback) {
         let transaction = null;
@@ -946,11 +1044,16 @@ class GuestVisitsLogic {
                         .then((hostUser) => {
                             if (!hostUser) return done("Logged in host user not found");
 
-                            if (
-                                hostUser.role !== "normalUser" &&
-                                hostUser.role !== "admin"
-                            ) {
-                                return done("Only a host user or admins can approve or deny a guestVisit");
+                            const permissionCheck = PermissionService.authorize(
+                                loggedInUser,
+                                "guest.approval"
+                            );
+
+                            if (!permissionCheck.allowed) {
+                                return done({
+                                    status: Consts.unAuthorized || 403,
+                                    message: "You do not have permission to approve guests"
+                                });
                             }
 
                             return done(null, hostUser);
@@ -1238,6 +1341,27 @@ class GuestVisitsLogic {
                             return done(err);
                         });
                 },
+                function (result, done) {
+                    DatabaseManager.receptionDesk
+                        .findOne({
+                            where: {
+                                receptionDeskID: result.guestVisit.receptionDeskID
+                            },
+                            attributes: [
+                                "receptionDeskID",
+                                "deskName",
+                                "deskCode",
+                                "phoneNumber"
+                            ]
+                        })
+                        .then((receptionDesk) => {
+                            result.receptionDesk = receptionDesk;
+                            return done(null, result);
+                        })
+                        .catch((err) => {
+                            return done(err);
+                        });
+                },
             ],
             function (err, result) {
                 if (err) {
@@ -1250,6 +1374,23 @@ class GuestVisitsLogic {
 
                 const guestVisit = result.guestVisit.get({ plain: true });
 
+                guestVisit.receptionDeskName = result.receptionDesk
+                    ? result.receptionDesk.deskName
+                    : null;
+
+                guestVisit.receptionDeskCode = result.receptionDesk
+                    ? result.receptionDesk.deskCode
+                    : null;
+
+                guestVisit.receptionDesk = result.receptionDesk
+                    ? {
+                        receptionDeskID: result.receptionDesk.receptionDeskID,
+                        deskName: result.receptionDesk.deskName,
+                        deskCode: result.receptionDesk.deskCode,
+                        phoneNumber: result.receptionDesk.phoneNumber
+                    }
+                    : null;
+
                 const badge = result.flow === "approved"
                     ? {
                         badgeID: guestVisit.badgeID,
@@ -1257,6 +1398,7 @@ class GuestVisitsLogic {
                         passNumber: guestVisit.passNumber,
                         guestName: guestVisit.guestName,
                         host: result.hostUser ? result.hostUser.name : guestVisit.hostUserID,
+                        receptionDeskName: result.receptionDesk?.deskName || null,
                         department: guestVisit.department,
                         timeIn: guestVisit.checkInTime,
                         expiryTime: guestVisit.expiryTime,
@@ -1276,7 +1418,7 @@ class GuestVisitsLogic {
                     approvalReason: result.flow === "approved" ? result.approvalReason : null,
                     denialReason: result.flow === "denied" ? result.denialReason : null,
                 });
-            }
+            },
         );
     }
 
@@ -1516,8 +1658,16 @@ class GuestVisitsLogic {
                         .then((user) => {
                             if (!user) return done("Logged in user not found");
 
-                            if (user.role !== "receptionist" && user.role !== "admin") {
-                                return done("Only a receptionist or admin can check out a guest");
+                            const permissionCheck = PermissionService.authorize(
+                                loggedInUser,
+                                "guest.checkout"
+                            );
+
+                            if (!permissionCheck.allowed) {
+                                return callback({
+                                status: Consts.unAuthorized,
+                                message: "Only  admins and receptionists can check-out guests",
+                                });
                             }
 
                             return done(null, user);
@@ -1733,5 +1883,55 @@ class GuestVisitsLogic {
             }
         );
     }
+
+    static findGuestVisitByID(body, loggedInUser, callback) {
+        async.waterfall(
+            [
+                function (done) {
+                    if (!loggedInUser || Utils.isEmpty(loggedInUser.userID)) {
+                        return done("Authenticated user is required");
+                    }
+
+                    if (Utils.isEmpty(body.visitID)) {
+                        return done("Visit ID is required");
+                    }
+
+                    return done(null);
+                },
+
+                function (done) {
+                    DatabaseManager.guestVisit
+                        .findOne({
+                            where: {
+                                visitID: body.visitID,
+                            },
+                        })
+                        .then((guestVisit) => {
+                            if (!guestVisit) {
+                                return done("Guest visit record not found");
+                            }
+
+                            return done(null, guestVisit);
+                        })
+                        .catch((err) => done(err));
+                },
+            ],
+            function (err, guestVisit) {
+                if (err) {
+                    return callback({
+                        status: Consts.httpCodeBadRequest || 400,
+                        message: "Failed to fetch guest visit record",
+                        error: err,
+                    });
+                }
+
+                return callback({
+                    status: Consts.httpCodeSuccess,
+                    message: "Guest visit record fetched successfully",
+                    guestVisit: guestVisit,
+                });
+            }
+        );
+    }    
 }
 export default GuestVisitsLogic;    

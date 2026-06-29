@@ -75,7 +75,7 @@ export default {
           title: 'Role',
           data: null,
           render: (data, type, row) => {
-            return `${row.role}`
+            return `${row.role.roleName}`
           }
         },
         {
@@ -96,6 +96,15 @@ export default {
 
   mounted() {
     this.dt = this.$refs.table.dt
+  },
+
+  computed: {
+    isAdmin() {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+
+      return roleName.toLowerCase() === 'admin'
+    }
   },
 
   methods: {
@@ -235,6 +244,61 @@ export default {
         this.loading = false
       }
     },
+    async deleteUserPermanently() {
+      this.loading = true
+
+      if (!this.selectedUserId) {
+        this.showToast('User ID is missing', true)
+        this.loading = false
+        return
+      }
+
+      try {
+        const res = await axios.post(
+          `${Const.BASE_URL}/users/deletePermanently`,
+          {
+            userId: this.selectedUserId,
+            feedback: 'yes'
+          },
+          {
+            headers: {
+              'access-token': localStorage.getItem('accessToken')
+            }
+          }
+        )
+
+        console.log(res.data)
+
+        if (res.data.status === 200) {
+          this.showToast('User permanently deleted', false)
+
+          const modal = document.getElementById('deletePermanentlyModal')
+          if (modal) {
+            const modalInstance = Modal.getInstance(modal) || new Modal(modal)
+            modalInstance.hide()
+
+            modal.addEventListener(
+              'hidden.bs.modal',
+              () => {
+                document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove())
+                document.body.classList.remove('modal-open')
+              },
+              { once: true }
+            )
+          }
+
+          this.getUsers()
+        } else {
+          const message = res.data.message || 'Oops, something went wrong!'
+          this.showToast(message, true)
+        }
+      } catch (error) {
+        console.error('Error deleting the user permanently:', error)
+        this.showToast('Failed to delete user permanently, please try again', true)
+      } finally {
+        this.loading = false
+      }
+    },
     async resetPassword() {
       this.loading = true
       if (!this.selectedUserId) {
@@ -319,7 +383,7 @@ export default {
           <small class="text-muted">Manage users, roles and status</small>
         </div>
 
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+        <button v-if="isAdmin" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
           Add User
         </button>
       </div>
@@ -335,7 +399,7 @@ export default {
             class="table table-hover table-striped mb-0"
           >
             <template #action="props">
-              <div class="d-flex gap-3 align-items-center">
+              <div v-if="isAdmin" class="d-flex gap-3 align-items-center">
                 <a
                   href="#"
                   class="text-primary"
@@ -377,6 +441,17 @@ export default {
                 >
                   Restore
                 </a>
+
+                <a
+                  v-if="props.rowData.status === 'inactive'"
+                  href="#"
+                  class="text-success"
+                  data-bs-toggle="modal"
+                  data-bs-target="#deletePermanentlyModal"
+                  @click.prevent="setUserId(props.rowData.userID)"
+                >
+                  Delete Permanently
+                </a>                
               </div>
             </template>
           </DataTable>
@@ -466,6 +541,37 @@ export default {
             <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
             <button type="submit" class="btn btn-primary" @click="restoreUser" :disabled="loading">
               <span v-if="loading">restoring...</span>
+              <span v-else>Yes</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- delete user  Permanently modal -->
+    <div
+      class="modal fade"
+      id="deletePermanentlyModal"
+      tabindex="-1"
+      aria-labelledby="deletePermanentlyModal"
+      aria-hidden="true"
+      data-bs-backdrop="static"
+      data-bs-keyboard="false"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content">
+          <div class="modal-body d-flex align-items-start justify-content-between">
+            <div>
+              <h5 class="modal-title mb-1">Delete User Permanently</h5>
+              <div class="text-muted">Are you sure you want to delete this user Permanently?</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn me-auto" data-bs-dismiss="modal">No</button>
+            <button type="submit" class="btn btn-primary" @click="deleteUserPermanently" :disabled="loading">
+              <span v-if="loading">deleting...</span>
               <span v-else>Yes</span>
             </button>
           </div>

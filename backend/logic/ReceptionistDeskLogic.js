@@ -37,6 +37,15 @@ static create(body, loggedInUser, callback) {
             },
 
             function (done) {
+                const roleName =
+                    loggedInUser?.role?.roleName ||
+                    loggedInUser?.roleName ||
+                    "";
+
+                if (roleName.toLowerCase() !== "admin") {
+                    return done("Only admins can create reception desks");
+                }
+
                 DatabaseManager.user
                     .findOne({
                         where: {
@@ -46,10 +55,6 @@ static create(body, loggedInUser, callback) {
                     })
                     .then((user) => {
                         if (!user) return done("Logged in user not found");
-
-                        if (user.role !== "admin") {
-                            return done("Only admins can create reception desks");
-                        }
 
                         return done(null, user);
                     })
@@ -63,13 +68,25 @@ static create(body, loggedInUser, callback) {
                     .findOne({
                         where: {
                             userID: body.receptionistUserID,
-                            role: "receptionist",
                             status: "active",
                         },
+                        include: [
+                            {
+                                model: DatabaseManager.role,
+                                as: "role",
+                                attributes: ["roleID", "roleName"],
+                                where: {
+                                    roleName: "receptionist",
+                                },
+                                required: true,
+                            },
+                        ],
                     })
                     .then((receptionistUser) => {
                         if (!receptionistUser) {
-                            return done("Selected receptionist was not found, inactive, or does not have receptionist role");
+                            return done(
+                                "Selected receptionist was not found, inactive, or does not have receptionist role"
+                            );
                         }
 
                         return done(null, adminUser, receptionistUser);

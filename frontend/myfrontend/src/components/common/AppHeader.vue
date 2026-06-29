@@ -1,15 +1,43 @@
 <script>
 export default {
-  components: {},
   data() {
-    return {}
+    return {
+      user: null
+    }
   },
-  props: [],
+
+  computed: {
+    roleName() {
+      return this.user?.role?.roleName || ''
+    },
+
+    userPermissions() {
+      return this.user?.permissions || []
+    },
+
+    isAdmin() {
+      return ['admin', 'superAdmin'].includes(this.roleName)
+    }
+  },
+
+  mounted() {
+    this.user = JSON.parse(localStorage.getItem('user') || '{}')
+  },
 
   methods: {
+    can(permission) {
+      return this.isAdmin || this.userPermissions.includes(permission)
+    },
+
+    canAny(permissions = []) {
+      return this.isAdmin || permissions.some(permission =>
+        this.userPermissions.includes(permission)
+      )
+    },
+
     handleLogout() {
       localStorage.clear()
-      window.location.reload()
+      this.$router.push('/login')
     }
   }
 }
@@ -48,7 +76,7 @@ export default {
                 <span class="nav-link-title"> Dashboard </span>
               </a>
             </li>
-            <li class="nav-item">
+            <li class="nav-item"   v-if="canAny([ 'disciplinaryRecords.view', 'disciplinaryRecords.create', 'disciplinaryRecords.update', 'disciplinaryRecords.assignToHRM', 'disciplinaryRecords.registerCase', 'disciplinaryRecords.processCase', 'disciplinaryRecords.directorProcessCase'])">
               <a class="nav-link" href="/records/disciplinary-records/list-records">
                 <span class="nav-link-icon d-md-none d-lg-inline-block">
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  
@@ -112,7 +140,7 @@ export default {
             </li>
 
             <li class="nav-item">
-              <a class="nav-link" href="/records/Badges/visitor-badges">
+              <a class="nav-link" href="/records/badges/visitor-badges">
                 <span class="nav-link-icon d-md-none d-lg-inline-block">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -153,8 +181,9 @@ export default {
                 aria-label="Open user menu">
                 <span class="avatar avatar-sm" style="background-image: url(./static/avatars/000m.jpg)"></span>
                 <div class="d-none d-xl-block ps-2">
-                  <div>Judicial Service Commission</div>
-                  <div class="mt-1 small text-muted">Manager</div>
+                  <div>{{ user?.team }}</div>
+                  <div>{{ user?.name }}</div>
+                   <div class="mt-1 small text-muted">{{ roleName || 'User' }}</div>
                 </div>
               </a>
               <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">

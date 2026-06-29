@@ -11,69 +11,69 @@ import { where } from "sequelize";
 
 class UserLogic {
 
-static create(body, callback) {
-    async.waterfall(
-        [
-            function (done) {
-                if (Utils.isEmpty(body.name)) return done("Name cannot be empty");
-                if (Utils.isEmpty(body.phone)) return done("Phone number is required");
-                if (Utils.isEmpty(body.email)) return done("Email is required");
+    static create(body, callback) {
+        async.waterfall(
+            [
+                function (done) {
+                    if (Utils.isEmpty(body.name)) return done("Name cannot be empty");
+                    if (Utils.isEmpty(body.phone)) return done("Phone number is required");
+                    if (Utils.isEmpty(body.email)) return done("Email is required");
 
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(body.email)) return done("Please enter a valid email address");
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(body.email)) return done("Please enter a valid email address");
 
-                if (Utils.isEmpty(body.password)) return done("Password is required");
+                    if (Utils.isEmpty(body.password)) return done("Password is required");
 
-                const validTeams = ['JSC', 'eboard', 'tonerSupport', 'networkSupport', 'softwareSupport'];
-                if (body.team && !validTeams.includes(body.team)) {
-                    return done("Invalid team selected");
-                }
+                    const validTeams = ['JSC', 'eboard', 'tonerSupport', 'networkSupport', 'softwareSupport'];
+                    if (body.team && !validTeams.includes(body.team)) {
+                        return done("Invalid team selected");
+                    }
 
-                DatabaseManager.user
-                    .findOne({ where: { email: body.email } })
-                    .then((res) => {
-                        if (res) return done("User with similar details already exists");
-                        done(null);
-                    })
-                    .catch((err) => done(err));
-            },
+                    DatabaseManager.user
+                        .findOne({ where: { email: body.email } })
+                        .then((res) => {
+                            if (res) return done("User with similar details already exists");
+                            done(null);
+                        })
+                        .catch((err) => done(err));
+                },
 
-            function (done) {
-                const params = {
-                    name: body.name,
-                    phone: body.phone,
-                    email: body.email,
-                    password: bcrypt.hashSync(body.password, 8),
-                    role: body.role || "normalUser",
-                    team: body.team || "JSC",
-                };
+                function (done) {
+                    const params = {
+                        name: body.name,
+                        phone: body.phone,
+                        email: body.email,
+                        password: bcrypt.hashSync(body.password, 8),
+                        roleID: body.roleID,
+                        team: body.team || "JSC",
+                    };
 
-                DatabaseManager.user
-                    .create(params)
-                    .then((res) => done(null, res))
-                    .catch((err) => done(err));
-            },
-        ],
-        function (err, data) {
-            if (err)
+                    DatabaseManager.user
+                        .create(params)
+                        .then((res) => done(null, res))
+                        .catch((err) => done(err));
+                },
+            ],
+            function (err, data) {
+                if (err)
+                    return callback({
+                        status: Consts.httpCodeServerError,
+                        message: "Failed to create user",
+                        error: err,
+                    });
+
+                // Remove sensitive fields
+                const user = data.get({ plain: true });
+                delete user.password;
+            
                 return callback({
-                    status: Consts.httpCodeServerError,
-                    message: "Failed to create user",
-                    error: err,
+                    status: Consts.httpCodeSuccess,
+                    message: "User created successfully",
+                    user: user,
                 });
-
-            // Remove sensitive fields
-            const user = data.get({ plain: true });
-            delete user.password;
-        
-            return callback({
-                status: Consts.httpCodeSuccess,
-                message: "User created successfully",
-                user: user,
-            });
-        }
-    );
-}
+            }
+        );
+    }
 
     static login(body, callback) {
         async.waterfall(
@@ -81,38 +81,76 @@ static create(body, callback) {
                 function (done) {
                     if (Utils.isEmpty(body.password)) return done("Password cannot be empty");
                     if (Utils.isEmpty(body.username)) return done("Username is required");
-                    
-                    DatabaseManager.user
-                        .findOne({
-                            attributes: ["userID", "name", "phone", "email", "password", "role"],
-                            where: { email: body.username }
-                        })
-                        .then((user) => {
-                            if (!user) return done("Invalid credentials");
-                            done(null, user);
-                        })
-                        .catch((err) => done(err));
+
+                    DatabaseManager.user.findOne({
+                        attributes: [
+                            "userID",
+                            "name",
+                            "phone",
+                            "email",
+                            "password",
+                            "roleID",
+                            "team",
+                        ],
+                        include: [
+                            {
+                                model: DatabaseManager.role,
+                                as: "role",
+                                attributes: ["roleID", "roleName"],
+                                include: [
+                                    {
+                                        model: DatabaseManager.rolePermission,
+                                        as: "rolePermissions",
+                                        include: [
+                                            {
+                                                model: DatabaseManager.permission,
+                                                as: "permission",
+                                                attributes: ["permissionID", "code", "module", "action", "description"]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                        where: {
+                            email: body.username
+                        }
+                    })
+                    .then((user) => {
+                        if (!user) return done("Invalid credentials");
+                        done(null, user);
+                    })
+                    .catch((err) => done(err));
                 },
+
                 function (user, done) {
                     if (!bcrypt.compareSync(body.password, user.password)) {
                         return done("Invalid credentials");
                     }
 
                     const session = Utils.randomString(40);
-                    const expiry = Utils.addTimeToDate(0, 0, 1, 0, 0); // 1 hour expiry
+                    const expiry = Utils.addTimeToDate(0, 0, 1, 0, 0);
 
-                    DatabaseManager.user
-                        .update({ session, expiry }, {
-                            where: { email: user.email }
-                        })
-                        .then(() => done(null, user, session, expiry))
-                        .catch((err) => done(err));
+                    DatabaseManager.user.update(
+                        { session, expiry },
+                        { where: { email: user.email } }
+                    )
+                    .then(() => done(null, user, session, expiry))
+                    .catch((err) => done(err));
                 },
+
                 function (user, session, expiry, done) {
+
+                    const permissions =
+                        user.role?.rolePermissions?.map(rp => rp.permission?.code) || [];
+
                     const payload = {
                         session,
                         expiry,
-                        role: user.role,
+                        roleID: user.roleID,
+                        roleName: user.role?.roleName,
+                        team: user.team,
+                        permissions,
                         name: user.name,
                         email: user.email,
                         userID: user.userID
@@ -124,14 +162,14 @@ static create(body, callback) {
                         { expiresIn: process.env["JWT_EXPIRY_TIME"] },
                         (err, token) => {
                             if (err) return done(err);
-                            done(null, token, user);
+                            done(null, token, user, permissions, session, expiry);
                         }
                     );
                 }
             ],
-            function (err, token, user) {
+            function (err, token, user, permissions, session, expiry) {
                 if (err) {
-                    console.error('Login error:', err);
+                    console.error("Login error:", err);
                     return callback({
                         status: Consts.httpCodeServerError,
                         message: "Failed to login",
@@ -146,15 +184,20 @@ static create(body, callback) {
                         userID: user.userID,
                         name: user.name,
                         phone: user.phone,
-                        role: user.role,
-                        session: user.session,
                         email: user.email,
-                        expiry: user.expiry
+                        team: user.team,
+                        session,
+                        expiry,
+                        role: {
+                            roleID: user.role?.roleID,
+                            roleName: user.role?.roleName
+                        },
+                        permissions
                     }
                 });
             }
         );
-    } 
+    }
     static findById(userId, callback) {
         async.waterfall(
             [
@@ -190,93 +233,135 @@ static create(body, callback) {
             }
         );
     }
-static list(param, callback) {
-    const baseQuery = {};
-    let filteredQuery = { ...baseQuery };
+    static list(param, callback) {
+        const baseQuery = {};
+        let filteredQuery = { ...baseQuery };
 
-    if (!Utils.isEmpty(param.role)) {
-        filteredQuery.role = String(param.role).trim();
-    }
+        if (!Utils.isEmpty(param.roleID)) {
+            filteredQuery.roleID = param.roleID;
+        }
 
-    if (!Utils.isEmpty(param.team)) {
-        filteredQuery.team = String(param.team).trim();
-    }
+        if (!Utils.isEmpty(param.team)) {
+            filteredQuery.team = String(param.team).trim();
+        }
 
-    // console.log("USER LIST PARAMS:", param);
-    // console.log("FILTERED QUERY:", filteredQuery);
-
-    if (!Utils.isEmpty(param["search[value]"])) {
-        const searchValue = param["search[value]"];
-
-        filteredQuery = {
-            ...filteredQuery,
-            [Op.or]: [
-                { email: { [Op.like]: `%${searchValue}%` } },
-                { phone: { [Op.like]: `%${searchValue}%` } },
-                { name: { [Op.like]: `%${searchValue}%` } },
-                { status: { [Op.like]: `%${searchValue}%` } },
-                { role: { [Op.like]: `%${searchValue}%` } },
-                { team: { [Op.like]: `%${searchValue}%` } }
+        let roleInclude = {
+            model: DatabaseManager.role,
+            as: "role",
+            attributes: [
+                "roleID",
+                "roleName"
             ],
+            required: false
         };
-    }
 
-    async.waterfall(
-        [
-            function (done) {
-                DatabaseManager.user
-                    .count({ where: baseQuery })
-                    .then((totalRecords) => done(null, totalRecords))
-                    .catch((err) => done(err));
-            },
+        if (!Utils.isEmpty(param.roleName)) {
+            roleInclude.where = {
+                roleName: {
+                    [Op.like]: `%${String(param.roleName).trim()}%`
+                }
+            };
+            roleInclude.required = true;
+        }
 
-            function (totalRecords, done) {
-                DatabaseManager.user
-                    .count({ where: filteredQuery })
-                    .then((filteredRecords) => done(null, totalRecords, filteredRecords))
-                    .catch((err) => done(err));
-            },
+        if (!Utils.isEmpty(param["search[value]"])) {
+            const searchValue = param["search[value]"];
 
-            function (totalRecords, filteredRecords, done) {
-                const offset = parseInt(param.start) || 0;
-                const limit = parseInt(param.length) || 100;
+            filteredQuery = {
+                ...filteredQuery,
+                [Op.or]: [
+                    { email: { [Op.like]: `%${searchValue}%` } },
+                    { phone: { [Op.like]: `%${searchValue}%` } },
+                    { name: { [Op.like]: `%${searchValue}%` } },
+                    { status: { [Op.like]: `%${searchValue}%` } },
+                    { team: { [Op.like]: `%${searchValue}%` } },
+                ]
+            };
+        }
 
-                DatabaseManager.user
-                    .findAll({
-                        where: filteredQuery,
-                        attributes: ["userID", "name", "phone", "email", "role", "status", "team"],
-                        order: [["createdAt", "DESC"]],
-                        offset,
-                        limit,
-                    })
-                    .then((data) => done(null, totalRecords, filteredRecords, data))
-                    .catch((err) => done(err));
-            },
-        ],
+        async.waterfall(
+            [
+                function (done) {
+                    DatabaseManager.user
+                        .count({
+                            where: baseQuery
+                        })
+                        .then((totalRecords) => done(null, totalRecords))
+                        .catch((err) => done(err));
+                },
 
-        function (err, totalRecords, filteredRecords, data) {
-            if (err) {
+                function (totalRecords, done) {
+                        DatabaseManager.user.count({
+                            where: filteredQuery,
+                            include: [roleInclude],
+                            distinct: true
+                        })
+                        .then((filteredRecords) =>
+                            done(null, totalRecords, filteredRecords)
+                        )
+                        .catch((err) => done(err));
+                },
+
+                function (totalRecords, filteredRecords, done) {
+
+                    const offset = parseInt(param.start) || 0;
+                    const limit = parseInt(param.length) || 100;
+
+                    DatabaseManager.user
+                        .findAll({
+                            where: filteredQuery,
+
+                            attributes: [
+                                "userID",
+                                "name",
+                                "phone",
+                                "email",
+                                "status",
+                                "team"
+                            ],
+
+                            include: [roleInclude],
+
+                            order: [["createdAt", "DESC"]],
+                            offset,
+                            limit
+                        })
+                        .then((data) => {
+                            done(
+                                null,
+                                totalRecords,
+                                filteredRecords,
+                                data
+                            );
+                        })
+                        .catch((err) => done(err));
+                }
+            ],
+
+            function (err, totalRecords, filteredRecords, data) {
+
+                if (err) {
+                    return callback({
+                        status: Consts.httpCodeServerError,
+                        message: "Failed to fetch User Contacts",
+                        error: err,
+                        data: [],
+                        recordsTotal: 0,
+                        recordsFiltered: 0
+                    });
+                }
+
                 return callback({
-                    status: Consts.httpCodeServerError,
-                    message: "Failed to fetch User Contacts",
-                    error: err,
-                    data: [],
-                    recordsTotal: 0,
-                    recordsFiltered: 0,
+                    status: Consts.httpCodeSuccess,
+                    message: "User Contacts fetched successfully",
+                    data,
+                    draw: parseInt(param.draw),
+                    recordsTotal: totalRecords,
+                    recordsFiltered: filteredRecords
                 });
             }
-
-            return callback({
-                status: Consts.httpCodeSuccess,
-                message: "User Contacts fetched successfully",
-                data,
-                draw: parseInt(param.draw),
-                recordsTotal: totalRecords,
-                recordsFiltered: filteredRecords,
-            });
-        }
-    );
-}
+        );
+    }
 
     static update(body, callback) {
         async.waterfall(
@@ -342,151 +427,245 @@ static list(param, callback) {
             }
         );
     }
+    
     static delete(body, callback) {
-        async.waterfall(
+    async.waterfall(
         [
-            function (done) {
+        function (done) {
             if (Utils.isEmpty(body.userId)) {
-                done("User ID cannot be empty");
-                return;
+            return done("User ID cannot be empty");
             }
-            DatabaseManager.user
-                .findOne({
-                attributes: ["userID", "name", "phone", "email", "role", "status"],
-                where: { userID: body.userId, status: { [Sequelize.Op.in]: ["active"] } },
-                })
-                .then((res) => {
-                if (Utils.isEmpty(res)) {
-                    done("User not found or already inactive");
-                    return;
-                }
-                done(null, res);
-                })
-                .catch((err) => done(err));
-            },
-            function (user, done) {
-            DatabaseManager.user
-                .update({ status: "inactive" }, { where: { userID: user.userID } })
-                .then(() => {
-                user.status = "inactive"; 
-                done(null, user);
-                })              
-                .catch((err) => done(err));
-            }
-        ],
-        function (err, updatedUser) {
-            if (err)
-            return callback({
-                status: Consts.httpCodeServerError,
-                message: "Failed to inactivate User",
-                error: err,
-            });
 
+            DatabaseManager.user
+            .findOne({
+                attributes: [
+                "userID",
+                "name",
+                "phone",
+                "email",
+                "team",
+                "roleID",
+                "status",
+                ],
+                where: {
+                userID: body.userId,
+                status: {
+                    [Sequelize.Op.in]: ["active"],
+                },
+                },
+                include: [
+                {
+                    model: DatabaseManager.role,
+                    as: "role",
+                    attributes: ["roleID", "roleName"],
+                },
+                ],
+            })
+            .then((res) => {
+                if (Utils.isEmpty(res)) {
+                return done("User not found or already inactive");
+                }
+
+                done(null, res);
+            })
+            .catch((err) => done(err));
+        },
+
+        function (user, done) {
+            DatabaseManager.user
+            .update(
+                { status: "inactive" },
+                {
+                where: {
+                    userID: user.userID,
+                },
+                }
+            )
+            .then(() => {
+                const updatedUser = user.toJSON();
+                updatedUser.status = "inactive";
+
+                done(null, updatedUser);
+            })
+            .catch((err) => done(err));
+        },
+        ],
+
+        function (err, updatedUser) {
+        if (err) {
             return callback({
+            status: Consts.httpCodeServerError,
+            message: "Failed to inactivate User",
+            error: err,
+            });
+        }
+
+        return callback({
             status: Consts.httpCodeSuccess,
             message: "User successfully marked as inactive",
             data: updatedUser,
-            });
+        });
         }
-        );
+    );
     }
     static reactivate(body, callback) {
-        async.waterfall(
+    async.waterfall(
         [
-            function (done) {
+        function (done) {
             if (Utils.isEmpty(body.userId)) {
-                done("User ID cannot be empty");
-                return;
+            return done("User ID cannot be empty");
             }
-            DatabaseManager.user
-                .findOne({
-                attributes: ["userID", "name", "phone", "email", "role", "status"],
-                where: { userID: body.userId, status: { [Sequelize.Op.in]: ["inactive"] } },
-                })
-                .then((res) => {
-                if (Utils.isEmpty(res)) {
-                    done("User not in an inactive state");
-                    return;
-                }
-                done(null, res);
-                })
-                .catch((err) => done(err));
-            },
-            function (user, done) {
-            DatabaseManager.user
-                .update({ status: "active" }, { where: { userID: user.userID } })
-                .then(() => {
-                user.status = "active"; 
-                done(null, user);
-                })              
-                .catch((err) => done(err));
-            }
-        ],
-        function (err, updatedUser) {
-            if (err)
-            return callback({
-                status: Consts.httpCodeServerError,
-                message: "Failed to reactivate User",
-                error: err,
-            });
 
+            DatabaseManager.user
+            .findOne({
+                attributes: [
+                "userID",
+                "name",
+                "phone",
+                "email",
+                "team",
+                "roleID",
+                "status",
+                ],
+                where: {
+                userID: body.userId,
+                status: {
+                    [Sequelize.Op.in]: ["inactive"],
+                },
+                },
+                include: [
+                {
+                    model: DatabaseManager.role,
+                    as: "role",
+                    attributes: ["roleID", "roleName"],
+                },
+                ],
+            })
+            .then((res) => {
+                if (Utils.isEmpty(res)) {
+                return done("User not in an inactive state");
+                }
+
+                done(null, res);
+            })
+            .catch((err) => done(err));
+        },
+
+        function (user, done) {
+            DatabaseManager.user
+            .update(
+                { status: "active" },
+                {
+                where: {
+                    userID: user.userID,
+                },
+                }
+            )
+            .then(() => {
+                const updatedUser = user.toJSON();
+                updatedUser.status = "active";
+
+                done(null, updatedUser);
+            })
+            .catch((err) => done(err));
+        },
+        ],
+
+        function (err, updatedUser) {
+        if (err) {
             return callback({
+            status: Consts.httpCodeServerError,
+            message: "Failed to reactivate User",
+            error: err,
+            });
+        }
+
+        return callback({
             status: Consts.httpCodeSuccess,
             message: "User successfully reactivated",
             data: updatedUser,
+        });
+        }
+    );
+    } 
+    static deletePermanently(body, callback) {
+    async.waterfall(
+        [
+        function (done) {
+            if (Utils.isEmpty(body.userId)) {
+            return done("User ID cannot be empty");
+            }
+
+            DatabaseManager.user
+            .findOne({
+                attributes: [
+                "userID",
+                "name",
+                "phone",
+                "email",
+                "team",
+                "roleID",
+                "status",
+                ],
+                where: {
+                userID: body.userId,
+                status: "inactive",
+                },
+                include: [
+                {
+                    model: DatabaseManager.role,
+                    as: "role",
+                    attributes: ["roleID", "roleName"],
+                },
+                ],
+            })
+            .then((res) => {
+                if (Utils.isEmpty(res)) {
+                return done("User not in an inactive state");
+                }
+
+                done(null, res);
+            })
+            .catch((err) => done(err));
+        },
+
+        function (user, done) {
+            const feedback = String(body.feedback || "").toLowerCase();
+
+            if (feedback !== "yes") {
+            return done("Permanent deletion cancelled by user");
+            }
+
+            DatabaseManager.user
+            .destroy({
+                where: {
+                userID: user.userID,
+                status: "inactive",
+                },
+            })
+            .then(() => {
+                done(null, user);
+            })
+            .catch((err) => done(err));
+        },
+        ],
+
+        function (err, result) {
+        if (err) {
+            return callback({
+            status: Consts.httpCodeServerError,
+            message: "Failed to delete user permanently",
+            error: err,
             });
         }
-        );
-    }  
-    static deletePermanently(body, callback) {
-        async.waterfall(
-            [
-            function (done) {
-                if (Utils.isEmpty(body.userId)) {
-                return done("user ID cannot be empty");
-                }
-                DatabaseManager.user
-                .findOne({
-                    attributes: ["userID", "name", "phone", "email", ],
-                    where: { userID: body.userId, status: "deleted" },
-                })
-                .then((res) => {
-                    if (Utils.isEmpty(res)) {
-                    return done("User not in a deleted state");
-                    }
-                    done(null, res); 
-                })
-                .catch((err) => done(err)); 
-            },
-            function (user, done) {
-                if (body.feedback.toLowerCase() === 'yes') {
-                DatabaseManager.user
-                    .destroy({ where: { userID: user.userID } })
-                    .then(() => {
-                    done(null, user); 
-                    })
-                    .catch((err) => done(err)); 
-                } else {
-                done("Permanent Deletion cancelled by user"); 
-                }
-            },
-            ],
-            function (err, result) {
-            if (err) {
-                return callback({
-                status: Consts.httpCodeServerError,
-                message: "Failed to delete user permanently",
-                error: err,
-                });
-            }
-    
-            return callback({
-                status: Consts.httpCodeSuccess,
-                message: "User deleted permanently",
-                data: result,
-            });
-            }
-        );
+
+        return callback({
+            status: Consts.httpCodeSuccess,
+            message: "User deleted permanently",
+            data: result,
+        });
+        }
+    );
     }
     static resetPassword(body, callback) {
         async.waterfall(

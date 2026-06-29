@@ -3,13 +3,14 @@ import Login from '../components/users/Login.vue'
 import MainComponent from '@/components/MainComponent.vue' 
 // import Dashboard from '@/components/dashboard/Dashboard.vue'
 // import InvoiceList from '@/components/invoice/InvoiceList.vue'
-// import NewInvoice from '@/components/invoice/NewInvoice.vue'
+import VisitorsBadges from '@/components/badges/VisitorsBadges.vue'
 import IctHelpDesk from '@/components/ict/IctHelpDesk.vue'
 import ViewTicket from '@/components/ict/ViewTicket.vue'
 import Users from '@/components/users/Users.vue'
 import DisciplinaryRecords from '@/components/disciplinaryRecords/DisciplinaryRecords.vue'
 import DisciplinaryRecordsDetails from '@/components/disciplinaryRecords/DisciplinaryRecordsDetails.vue'
 import GuestsManagement from '@/components/guests/GuestsManagement.vue'
+import GuestView from '@/components/guests/GuestView.vue'
 
 export const routes = [
   {
@@ -82,7 +83,19 @@ export const routes = [
           requiresAuth: true
         }
       }, 
-      
+      {
+        path: 'badges/visitor-badges',
+        name: 'visitor-badges',
+        component:VisitorsBadges,
+        meta: {
+          requiresAuth: true
+        }
+      }, 
+      {
+        path: '/guest-visits/:visitID',
+        name: 'GuestView',
+        component: GuestView
+      }
     ]
   },
 

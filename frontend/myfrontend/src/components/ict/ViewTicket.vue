@@ -23,7 +23,10 @@ export default {
     },
 
     isAdmin() {
-      return this.currentUser?.role === 'admin'
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+
+      return roleName.toLowerCase() === 'admin'
     },
 
     isAssignedAgent() {
@@ -53,8 +56,9 @@ export default {
     },
 
     canResolveTicket() {
+      const allowedStatuses = ['open', 'escalated']
       return (
-        this.ticket?.status === 'open' &&
+        allowedStatuses.includes(this.ticket?.status) &&
         (this.isAdmin || this.isAssignedAgent)
       )
     },
@@ -364,7 +368,7 @@ export default {
     <div>
       <strong>{{ item.data.escalatedBy }}</strong>
       <span class="badge bg-danger text-white ms-2">
-        {{ item.data.user?.role || 'Admin' }}
+        {{ item.data.user?.roleName || 'Admin' }}
       </span>
     </div>
 
@@ -375,6 +379,7 @@ export default {
 
   <!-- Escalation Reason -->
   <p class="mb-2">
+    <strong>Escalation Details : </strong>
     {{ item.data.escalationReason }}
   </p>
 
@@ -390,7 +395,7 @@ export default {
     </div>
   </div>
 
-  <!-- 🔥 ESCALATION RESPONSES -->
+  <!--  ESCALATION RESPONSES -->
   <div v-if="ticket?.escalationResponses?.length" class="mt-3 border-top pt-3">
 
     <div

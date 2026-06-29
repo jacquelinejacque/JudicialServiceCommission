@@ -48,7 +48,7 @@ class DisciplinaryRecord {
         type: DataTypes.ENUM,
         allowNull: false,
         values: [
-            'Received', 'Registered', 'Under_review', 'Processed','Preliminary_review_completed', 'Admitted', 
+            'Received', 'Registered', 'Under_review', 'Assigned', 'Processed','Preliminary_review_completed', 'Admitted', 
             'Pending', 'Scheduled', 'Hearing' , 'Adjourned', 'Judgment Reserved', 'Judgment Delivered',  'Closed'
         ],
         defaultValue: 'Received'

@@ -176,59 +176,74 @@ class HelpDeskLogic {
                 try {
                 if (!authUser || Utils.isEmpty(authUser.userID)) return done("Unauthorized");
 
-                const where = {};
-                const isAdmin = authUser.role === "admin";
+                query = query || {};
 
-                // -----------------------------
-                // ROLE-BASED VISIBILITY (scope)
-                // -----------------------------
-                if (!isAdmin) {
-                    // Non-admin can see:
-                    // 1) tickets they raised
-                    // 2) tickets assigned to them
-                    where[Op.or] = [
-                    { userID: authUser.userID },
-                    { assignedTo: authUser.userID },
-                    ];
-                } else {
-                    // Admin sees ALL tickets by default
-                    // Optional admin filters:
-                    // ?requesterID=UUID   (tickets raised by a user)
-                    // ?assignedTo=UUID    (tickets assigned to an agent/user)
+                const where = {};
+
+                const roleName = authUser?.role?.roleName || authUser?.roleName || "";
+                const team = authUser?.team || "";
+
+                const normalizedRole = roleName.toLowerCase();
+                const normalizedTeam = team.toLowerCase();
+
+                const isAdmin = normalizedRole === "admin";
+                const isAgent = normalizedRole === "agent";
+                const isNormalUser = normalizedRole === "normaluser";
+                const isJSCAdmin = isAdmin && normalizedTeam === "jsc";
+
+                // Admin from JSC sees all tickets
+                if (isJSCAdmin) {
                     if (!Utils.isEmpty(query.requesterID)) where.userID = query.requesterID;
                     if (!Utils.isEmpty(query.assignedTo)) where.assignedTo = query.assignedTo;
                 }
 
-                // -----------------------------
-                // OPTIONAL FILTERS
-                // -----------------------------
+                // Admin not from JSC sees only tickets escalated to their team
+                else if (isAdmin) {
+                    if (Utils.isEmpty(team)) {
+                        return done("User team is missing. Please login again.");
+                    }
+
+                    where.escalatedToTeam = team;
+                }
+
+                // Agent sees tickets they created and tickets assigned to them
+                else if (isAgent) {
+                    where[Op.or] = [
+                    { userID: authUser.userID },
+                    { assignedTo: authUser.userID },
+                    ];
+                }
+
+                // Normal user sees only tickets they created
+                else if (isNormalUser) {
+                    where.userID = authUser.userID;
+                }
+
+                // Fallback: user sees only own tickets
+                else {
+                    where.userID = authUser.userID;
+                }
+
                 if (!Utils.isEmpty(query.ticketNumber)) where.ticketNumber = query.ticketNumber;
                 if (!Utils.isEmpty(query.status)) where.status = query.status;
                 if (!Utils.isEmpty(query.priority)) where.priority = query.priority;
                 if (!Utils.isEmpty(query.issueType)) where.issueType = query.issueType;
 
-                // Date range filter (createdAt)
                 if (!Utils.isEmpty(query.dateFrom) || !Utils.isEmpty(query.dateTo)) {
                     where.createdAt = {};
                     if (!Utils.isEmpty(query.dateFrom)) where.createdAt[Op.gte] = new Date(query.dateFrom);
                     if (!Utils.isEmpty(query.dateTo)) where.createdAt[Op.lte] = new Date(query.dateTo);
                 }
 
-                // Search across fields (ticketNumber/title/description)
-                // IMPORTANT: This must NOT overwrite existing Op.or used for non-admin scope.
                 if (!Utils.isEmpty(query.search)) {
                     const s = String(query.search).trim();
 
-                    // Use Op.iLike for Postgres, Op.like for MySQL
-                    const likeOp = Op.iLike || Op.like;
-
                     const searchOr = [
-                    { ticketNumber: { [likeOp]: `%${s}%` } },
-                    { title: { [likeOp]: `%${s}%` } },
-                    { description: { [likeOp]: `%${s}%` } },
+                    { ticketNumber: { [Op.like]: `%${s}%` } },
+                    { title: { [Op.like]: `%${s}%` } },
+                    { description: { [Op.like]: `%${s}%` } },
                     ];
 
-                    // If scope already uses Op.or (non-admin), combine with Op.and
                     if (where[Op.or]) {
                     where[Op.and] = where[Op.and] || [];
                     where[Op.and].push({ [Op.or]: searchOr });
@@ -245,6 +260,8 @@ class HelpDeskLogic {
 
             // 2) Pagination + fetch
             function (where, done) {
+                query = query || {};
+
                 const page = !Utils.isEmpty(query.page) ? parseInt(query.page, 10) : 1;
                 const limit = !Utils.isEmpty(query.limit) ? parseInt(query.limit, 10) : 20;
 
@@ -287,14 +304,14 @@ class HelpDeskLogic {
             },
             ],
 
-            // Final callback
             function (err, data) {
-            if (err)
+            if (err) {
                 return callback({
                 status: Consts.httpCodeServerError,
                 message: "Failed to fetch tickets",
-                error: err,
+                error: err.message || err,
                 });
+            }
 
             return callback({
                 status: Consts.httpCodeSuccess,
@@ -314,7 +331,7 @@ class HelpDeskLogic {
                 });
             }
 
-            if (authUser.role !== "admin") {
+            if (authUser?.role?.roleName !== "admin") {
                 return callback({
                     status: Consts.httpCodeForbidden,
                     message: "Forbidden: Admin only",
@@ -792,7 +809,8 @@ class HelpDeskLogic {
 
                 // 3) Check permissions (admin or assigned agent)
                 function (ticket, done) {
-                    const isAdmin = authUser.role === "admin";
+                    const roleName = authUser?.role?.roleName?.toLowerCase();
+                    const isAdmin = roleName === "admin";
                     const isAssignedAgent = ticket.assignedTo === authUser.userID;
 
                     if (!isAdmin && !isAssignedAgent) {
@@ -920,7 +938,7 @@ class HelpDeskLogic {
                         });
                     }
 
-                    if (authUser.role !== "admin") {
+                    if (authUser?.role?.roleName?.toLowerCase() !== "admin") {
                         return done({
                             message: "Forbidden: Admin only",
                             status: Consts.httpCodeForbidden,
@@ -1303,7 +1321,8 @@ class HelpDeskLogic {
 
                 // 3) Check permissions (admin or assigned agent)
                 function (ticket, done) {
-                    const isAdmin = authUser.role === "admin";
+                    const roleName = authUser?.role?.roleName?.toLowerCase();
+                    const isAdmin = roleName === "admin";
                     const isAssignedAgent = ticket.assignedTo === authUser.userID;
 
                     if (!isAdmin && !isAssignedAgent) {

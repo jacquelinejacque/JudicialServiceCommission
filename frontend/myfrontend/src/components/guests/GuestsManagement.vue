@@ -9,7 +9,6 @@ import Toastify from 'toastify-js'
 import axios from 'axios'
 import { Modal } from 'bootstrap'
 import CheckOut from './CheckOut.vue'
-//import RecordActions from './RecordActions.vue'
 DataTable.use(DataTableBs5)
 
 export default {
@@ -18,7 +17,6 @@ export default {
     PreRegisterForm,
     ApproveGuest,
     CheckOut,
-//    RecordActions,
   },
 
   data() {
@@ -28,21 +26,21 @@ export default {
       selectedGuest: null,
       actionModal: null,
       selectedAction: null,
-      titleSearchTimeout: null,
-      complainantNameSearchTimeout: null,
+      passNumberSearchTimeout: null,
+      idNumberSearchTimeout: null,
       legalTeamUsers: [],
       exportingReports: false,
       selectedApprovalVisitID: null,
       selectedCheckOutVisitID: null,
       approvalModal: null,
       filters: {
-        stage: '',
-        title: '',
+        idNumber: '',
+        passNumber: '',
         source: '',
         status: '',
-        complainantName: '',
+        visitCategory: '',
         fileNumber: '',
-        panel: '',
+        department: '',
         assignedTo: '',
         dateRange: '',
         startDate: '',
@@ -94,6 +92,7 @@ export default {
         columns: [
         { title: 'PassNumber', data: 'passNumber' },
         { title: 'Guest Name', data: 'guestName' },
+        { title: 'Reception Desk', data: 'receptionDeskName' },
         { title: 'Id Type', data: 'idType' },
         { title: 'ID Number', data: 'idNumber' },
         { title: 'Organization', data: 'organization' },
@@ -113,7 +112,7 @@ export default {
     console.log('Current user from localStorage:', this.currentUser)
     console.log('Is registrar:', this.isRegistrar)
     this.dt = this.$refs.table.dt
-    this.fetchLegalTeamUsers()
+    
   },
   computed: {
     formattedAction() {
@@ -121,17 +120,35 @@ export default {
         ? this.selectedAction.replaceAll('_', ' ')
         : ''
     },
-    isNormalUser() {
-      return this.currentUser?.role === 'normalUser'
+    permissions() {
+      return this.currentUser?.permissions || []
     },
+
     isAdmin() {
-      return this.currentUser?.role === 'admin'
+      return this.permissions.includes('admin.access') // optional if you have it
     },
+
+    isNormalUser() {
+      return this.permissions.length > 0
+    },
+
     isReceptionist() {
-      return this.currentUser?.role === 'receptionist'
+      return this.permissions.includes('guest.checkin')
+    },
+
+    canApproveGuest() {
+      return this.permissions.includes('guest.approval')
+    },
+
+    canCheckOutGuest() {
+      return this.permissions.includes('guest.checkout')
     }
   },
   methods: {
+    can(permission) {
+      return this.permissions.includes(permission)
+    },
+
     openCheckOutModal(record) {
       this.selectedCheckOutVisitID = record.visitID
 
@@ -200,17 +217,17 @@ export default {
 
       this.applyFilters()
     },
-    handleTitleSearch() {
-      clearTimeout(this.titleSearchTimeout)
+    handlePassNumberSearch() {
+      clearTimeout(this.passNumberSearchTimeout)
 
-      this.titleSearchTimeout = setTimeout(() => {
+      this.passNumberSearchTimeout = setTimeout(() => {
         this.applyFilters()
       }, 400)
     },
-    handleComplainantNameSearch() {
-      clearTimeout(this.complainantNameSearchTimeout)
+    handleIdNumberSearch() {
+      clearTimeout(this.idNumberSearchTimeout)
 
-      this.complainantNameSearchTimeout = setTimeout(() => {
+      this.idNumberSearchTimeout = setTimeout(() => {
         this.applyFilters()
       }, 400)
     },
@@ -228,8 +245,8 @@ export default {
         source: '',
         status: '',
         fileNumber: '',
-        complainantName: '',
-        panel: '',
+        visitCategory: '',
+        department: '',
         assignedTo: '',
         dateRange: '',
         startDate: '',
@@ -238,98 +255,7 @@ export default {
 
       this.applyFilters()
     },
-    async fetchLegalTeamUsers() {
-      try {
-          this.loadingUsers = true
 
-          const res = await axios.get(`${Const.BASE_URL}/users/list`, {
-          params: {
-              role: 'legalTeam',
-          },
-          headers: {
-              'access-token': localStorage.getItem('accessToken')
-          }
-          })
-
-          if (res.data?.status === 200) {
-          this.legalTeamUsers = res.data.data || []
-          } else {
-          this.legalTeamUsers = []
-          this.showToast(res.data?.message || 'Failed to load legal team users', true)
-          }
-
-      } catch (err) {
-          console.error(err)
-          this.showToast(
-          err?.response?.data?.message || 'Failed to fetch legal team users',
-          true
-          )
-          this.legalTeamUsers = []
-
-      } finally {
-          this.loadingUsers = false
-      }
-    },
-    async exportReports() {
-      try {
-        this.exportingReports = true
-
-        const response = await axios.get(`${Const.BASE_URL}/disciplinaryRecords/exportReports`, {
-          params: {
-            stage: this.filters.stage,
-            title: this.filters.title,
-            source: this.filters.source,
-            status: this.filters.status,
-            complainantName: this.filters.complainantName,
-            fileNumber: this.filters.fileNumber,
-            panel: this.filters.panel,
-            assignedTo: this.filters.assignedTo,
-            dateRange: this.filters.dateRange,
-            startDate: this.filters.startDate,
-            endDate: this.filters.endDate
-          },
-          responseType: 'blob',
-          headers: {
-            'access-token': localStorage.getItem('accessToken')
-          }
-        })
-
-        const url = window.URL.createObjectURL(response.data)
-
-        let fileName = 'filtered_reports.xlsx'
-
-        const disposition = response.headers['content-disposition']
-        if (disposition) {
-          const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
-          const normalMatch =
-            disposition.match(/filename\s*=\s*"([^"]+)"/i) ||
-            disposition.match(/filename\s*=\s*([^;]+)/i)
-
-          if (utf8Match && utf8Match[1]) {
-            fileName = decodeURIComponent(utf8Match[1].trim())
-          } else if (normalMatch && normalMatch[1]) {
-            fileName = normalMatch[1].trim().replace(/^"|"$/g, '')
-          }
-        }
-
-        const link = document.createElement('a')
-        link.href = url
-        link.download = fileName
-
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-
-        window.URL.revokeObjectURL(url)
-
-        this.showToast("Reports export started", false)
-      } catch (error) {
-        console.error("Export failed:", error)
-        this.showToast("Failed to export reports", true)
-      } finally {
-        this.exportingReports = false
-      }
-    },
     formatDate(dateString) {
       if (!dateString) return ''
 
@@ -398,16 +324,9 @@ export default {
       }
     },
     viewRecord(record) {
-      const recordID = record.recordID || record.recordId
-
-      if (!recordID) {
-        this.showToast('Record ID is missing', true)
-        return
-      }
-
       this.$router.push({
-        name: 'RecordDetails',
-        params: { recordID }
+        name: 'GuestView',
+        params: { visitID: record.visitID }
       })
     },
     async deleteRecord() {
@@ -492,208 +411,7 @@ export default {
       const modal = new Modal(document.getElementById('actionModal'))
       modal.show()
     },
-    async submitAction() {
-      try {
-        let payloadToSend = {}
-        if (this.selectedAction === 'ASSIGN_REPORT') {
-          payloadToSend.note = 'Report assigned'
-        }
 
-        if (this.selectedAction === 'REGISTER_CASE') {
-          payloadToSend.note = 'Case registered'
-        }
-
-        if (this.selectedAction === 'PROCESS_CASE') {
-          payloadToSend.note = 'Case processing started'
-        }
-
-        if (this.selectedAction === 'PRELIMINARY_REVIEW') {
-          payloadToSend.note = 'Preliminary review done'
-        }
-
-        if (this.selectedAction === 'REVIEW_PRELIMINARY_REPORT') {
-          payloadToSend.note = 'Preliminary report reviewed'
-        }
-        // Only send payload when needed
-        if (this.selectedAction === 'ADD_HEARING_DATE') {
-          payloadToSend.hearingDate = this.actionPayload.hearingDate
-        }
-        if (this.selectedAction === 'ADJOURN_CASE') {
-          payloadToSend.reason = this.actionPayload.reason
-        }
-        if (this.selectedAction === 'JUDGMENT_RESERVED') {
-          payloadToSend.note = this.actionPayload.note
-        }       
-        if (this.selectedAction === 'ADD_JUDGEMENT') {
-          payloadToSend.judgement = this.actionPayload.judgement
-        }
-
-        const res = await axios.post(
-          `${Const.BASE_URL}/disciplinaryRecords/update-action`,
-          {
-            recordID: this.selectedRecordId,
-            action: this.selectedAction,
-            payload: payloadToSend
-          },
-          {
-            headers: {
-              'access-token': localStorage.getItem('accessToken')
-            }
-          }
-        )
-
-        if (res.data.status === 200) {
-          this.showToast("Action successful", false)
-
-          const modalEl = document.getElementById('actionModal')
-          const modal = Modal.getInstance(modalEl)
-          modal.hide()
-
-          this.getRecords()
-        } else {
-          this.showToast(res.data.message, true)
-        }
-      } catch (err) {
-        console.error(err)
-        this.showToast("Action failed", true)
-      }
-    }, 
-    async downloadReport(record) {
-      try {
-        const fileUrl = `${Const.BASE_URL}/disciplinaryRecords/file/${record.recordID}`
-
-        const response = await axios.get(fileUrl, {
-          responseType: 'blob',
-          headers: {
-            'access-token': localStorage.getItem('accessToken')
-          }
-        })
-
-        const url = window.URL.createObjectURL(response.data)
-
-        let fileName = `${record.title || 'Report'}_Report`
-
-        const disposition = response.headers['content-disposition']
-        if (disposition) {
-          const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
-          const normalMatch =
-            disposition.match(/filename\s*=\s*"([^"]+)"/i) ||
-            disposition.match(/filename\s*=\s*([^;]+)/i)
-
-          if (utf8Match && utf8Match[1]) {
-            fileName = decodeURIComponent(utf8Match[1].trim())
-          } else if (normalMatch && normalMatch[1]) {
-            fileName = normalMatch[1].trim().replace(/^"|"$/g, '')
-          }
-        }
-
-        const link = document.createElement('a')
-        link.href = url
-        link.download = fileName
-
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-
-        window.URL.revokeObjectURL(url)
-
-        this.showToast("Download started", false)
-
-      } catch (error) {
-        console.error("Download failed:", error)
-        this.showToast("Failed to download report", true)
-      }
-    },
-    async downloadCaseFile(record, fileType) {
-      try {
-        const fileUrl = `${Const.BASE_URL}/disciplinaryRecords/caseFile/${record.recordID}/${fileType}`
-
-        const response = await axios.get(fileUrl, {
-          responseType: 'blob',
-          headers: {
-            'access-token': localStorage.getItem('accessToken')
-          }
-        })
-
-        const url = window.URL.createObjectURL(response.data)
-
-        let fileName = `${record.title || 'Case_File'}_${record.fileNumber || 'NoFileNumber'}_${fileType}`
-
-        const disposition = response.headers['content-disposition']
-        if (disposition) {
-          const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
-          const normalMatch =
-            disposition.match(/filename\s*=\s*"([^"]+)"/i) ||
-            disposition.match(/filename\s*=\s*([^;]+)/i)
-
-          if (utf8Match && utf8Match[1]) {
-            fileName = decodeURIComponent(utf8Match[1].trim())
-          } else if (normalMatch && normalMatch[1]) {
-            fileName = normalMatch[1].trim().replace(/^"|"$/g, '')
-          }
-        }
-
-        const link = document.createElement('a')
-        link.href = url
-        link.download = fileName
-
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-
-        window.URL.revokeObjectURL(url)
-
-        this.showToast("Download started", false)
-      } catch (error) {
-        console.error("Download failed:", error)
-        this.showToast("Failed to download file", true)
-      }
-    },
-    async downloadPreliminaryReport(record) {
-      try {
-        const fileUrl = `${Const.BASE_URL}/disciplinaryRecords/preliminaryReport/${record.recordID}`
-
-        const response = await axios.get(fileUrl, {
-          responseType: 'blob',
-          headers: {
-            'access-token': localStorage.getItem('accessToken')
-          }
-        })
-
-        const url = window.URL.createObjectURL(response.data)
-
-        let fileName = `${record.title || 'Preliminary_Report'}_PreliminaryReport`
-
-        const disposition = response.headers['content-disposition']
-        if (disposition) {
-          const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
-          const normalMatch =
-            disposition.match(/filename\s*=\s*"([^"]+)"/i) ||
-            disposition.match(/filename\s*=\s*([^;]+)/i)
-
-          if (utf8Match && utf8Match[1]) {
-            fileName = decodeURIComponent(utf8Match[1].trim())
-          } else if (normalMatch && normalMatch[1]) {
-            fileName = normalMatch[1].trim().replace(/^"|"$/g, '')
-          }
-        }
-
-        const link = document.createElement('a')
-        link.href = url
-        link.download = fileName
-
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-
-        window.URL.revokeObjectURL(url)
-
-        this.showToast("Download started", false)
-      } catch (error) {
-        console.error("Download failed:", error)
-        this.showToast("Failed to download preliminary report", true)
-      }
-    },
     handleActionCompleted() {
       const modalEl = document.getElementById('actionModal')
       const modal = Modal.getInstance(modalEl)
@@ -720,11 +438,11 @@ export default {
         </div>
 
         <div class="d-flex gap-2">
-          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#preRegisterModal">
+          <button  v-if="can('guest.preregister')" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#preRegisterModal">
             PreRegister Guest
           </button>
 
-          <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#walkInGuestModal">
+          <button v-if="can('guest.addwalkin')" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#walkInGuestModal">
             Add Walk-In Guest
           </button>
         </div>
@@ -772,14 +490,14 @@ export default {
           </div>
 
           <div class="col-md-2">
-            <label for="filterComplainantName" class="form-label">Complainant Name</label>
+            <label for="filterIdNumber" class="form-label">ID Number</label>
             <input
-              id="filterComplainantName"
-              v-model="filters.complainantName"
+              id="filterIdNumber"
+              v-model="filters.idNumber"
               type="text"
               class="form-control"
-              placeholder="Search by Complainant Name"
-              @input="handleComplainantNameSearch"
+              placeholder="Search by ID Number"
+              @input="handleIdNumberSearch"
             />
           </div>
 
@@ -796,80 +514,58 @@ export default {
           </div>
 
           <div class="col-md-2">
-            <label for="filterStage" class="form-label">Stage</label>
-            <select
-              id="filterStage"
-              v-model="filters.stage"
-              class="form-select"
-              @change="applyFilters"
-            >
-              <option value="">All Stages</option>
-              <option value="CASE">CASE</option>
-              <option value="REPORT">REPORT</option>
-            </select>
-          </div>
-
-          <div class="col-md-2">
-            <label for="filterTitle" class="form-label">Title</label>
+            <label for="filterPassNumber" class="form-label">Pass Number</label>
             <input
-              id="filterTitle"
-              v-model="filters.title"
+              id="filterPassNumber"
+              v-model="filters.passNumber"
               type="text"
               class="form-control"
-              placeholder="Search by title"
-              @input="handleTitleSearch"
+              placeholder="Search by passNumber"
+              @input="handlePassNumberSearch"
             />
           </div>
 
           <div class="col-md-2">
-            <label for="filterSource" class="form-label">Source</label>
+            <label for="filterVisitCategory" class="form-label">Visit Category</label>
             <select
-              id="filterSource"
-              v-model="filters.source"
+              id="filterVisitCategory"
+              v-model="filters.visitCategory"
               class="form-select"
               @change="applyFilters"
             >
-              <option value="">All Sources</option>
-              <option value="OCJ">OCJ</option>
-              <option value="PUBLIC">PUBLIC</option>
+              <option value="">All Categories</option>
+              <option value="officialMeeting">Official Meeting</option>
+              <option value="vendor">Vendor</option>
+              <option value="interview">Interview</option>
+              <option value="contractor">Contractor</option>
+              <option value="delivery">Delivery</option>
+              <option value="walkIn">WalkIn</option>
+              <option value="personalVisit">Personal Visit</option>
             </select>
           </div>
 
           <div class="col-md-2">
-            <label for="filterPanel" class="form-label">Panel</label>
+            <label for="filterDepartment" class="form-label">Department</label>
             <select
-              id="filterPanel"
-              v-model="filters.panel"
+              id="filterDepartment"
+              v-model="filters.department"
               class="form-select"
               @change="applyFilters"
             >
-              <option value="">All Panels</option>
-              <option value="Panel_1">Panel 1</option>
-              <option value="Panel_2">Panel 2</option>
-              <option value="Panel_3">Panel 3</option>
-              <option value="Panel_4">Panel 4</option>
-              <option value="Panel_5">Panel 5</option>
-              <option value="Panel_6">Panel 6</option>
-              <option value="Panel_7">Panel 7</option>
-            </select>
-          </div>
-
-          <div class="col-md-2">
-            <label for="filterAssignedTo" class="form-label">Assigned To</label>
-            <select
-              id="filterAssignedTo"
-              v-model="filters.assignedTo"
-              class="form-select"
-              @change="applyFilters"
-            >
-              <option value="">All Legal Team Members</option>
-              <option
-                v-for="user in legalTeamUsers"
-                :key="user.userID"
-                :value="user.userID"
-              >
-                {{ user.name }}
-              </option>
+              <option value="">All Departments</option>
+              <option value="administration">Administration</option>
+              <option value="officeOfRegistrar">Office Of Registrar</option>
+              <option value="legal">Legal</option>
+              <option value="complaints">Complaints</option>
+              <option value="communication">Communication</option>
+              <option value="HR">Human Resource</option>
+              <option value="accounts">Accounts</option>
+              <option value="finance">Finance</option>
+              <option value="procurement">Procurement</option>
+              <option value="supplyChain">Supply Chain</option>
+              <option value="inspectorate">Inspectorate</option>
+              <option value="ICT">ICT</option>
+              <option value="records">Records</option>
             </select>
           </div>
 
@@ -882,19 +578,15 @@ export default {
               @change="applyFilters"
             >
               <option value="">All Statuses</option>
-              <option value="Received">Received</option>
-              <option value="Under_review">Under Review</option>
-              <option value="Registered">Registered</option>                         
-              <option value="Processed">Processed</option>
-              <option value="Preliminary_review_completed">Preliminary Review Completed</option>
-              <option value="Admitted">Admitted</option>
-              <option value="Pending">Pending</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Hearing">Hearing</option>
-              <option value="Adjourned">Adjourned</option>
-              <option value="Judgment Reserved">Judgment Reserved</option>
-              <option value="Judgment Delivered">Judgment Delivered</option>
-              <option value="Closed">Closed</option>
+              <option value="preRegistered">Pre Registered</option>
+              <option value="pendingApproval">Pending Approval</option>
+              <option value="approved">Approved</option>                         
+              <option value="rejected">Rejected</option>
+              <option value="checkedIn">Checked In</option>
+              <option value="overdue">Overdue</option>
+              <option value="checkedOut">Checked Out</option>
+              <option value="denied">Denied</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </div>
 
@@ -953,7 +645,7 @@ export default {
                 </a>
               </li>
 
-              <li v-if="props.rowData.status === 'preRegistered'">
+              <li v-if="permissions.includes('guest.checkin') && props.rowData.status === 'preRegistered'">
                 <a
                   href="#"
                   class="dropdown-item text-success"
@@ -963,7 +655,7 @@ export default {
                 </a>
               </li>
               <li
-                v-if="(isNormalUser || isAdmin) && (props.rowData.status === 'rejected' || props.rowData.status === 'pendingApproval')"
+                v-if="permissions.includes('guest.approval') && ['rejected', 'pendingApproval'].includes(props.rowData.status)"
               >
                 <a
                   href="#"
@@ -974,7 +666,9 @@ export default {
                 </a>
               </li>
 
-              <li v-if="(isAdmin || isReceptionist) && props.rowData.status === 'checkedIn'">
+              <li
+                v-if="canCheckOutGuest && ['checkedIn', 'overdue'].includes(props.rowData.status)"
+              >
                 <a
                   href="#"
                   class="dropdown-item text-danger"
@@ -993,144 +687,6 @@ export default {
                   @click.prevent="editRecord(props.rowData)"
                 >
                   Edit
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="downloadReport(props.rowData)"
-                >
-                  Download Report
-                </a>
-              </li>     
-              <li v-if="props.rowData.status === 'Processing'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="downloadCaseFile(props.rowData, 'summary')"
-                >
-                  Download Summary File
-                </a>
-              </li>
-
-              <li v-if="props.rowData.status === 'Processing'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="downloadCaseFile(props.rowData, 'boardBrief')"
-                >
-                  Download Board Brief File
-                </a>
-              </li>                       
-              <li v-if="isRegistrar && props.rowData.status === 'Received'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'ASSIGN_REPORT')"
-                >
-                  Assign Report
-                </a>
-              </li>
-              <li v-if="isDirectorLegal && props.rowData.status === 'Under_review'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'REGISTER_CASE')"
-                >
-                  Register Case
-                </a>
-              </li>
-              <li v-if="isLegalTeam 
-                        && props.rowData.stage === 'CASE' 
-                        && props.rowData.status === 'Registered'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'PROCESS_CASE')"
-                >
-                  Process Case
-                </a>
-              </li>
-              <li v-if="props.rowData.stage === 'CASE' 
-                        && props.rowData.status === 'Processed'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'PRELIMINARY_REVIEW')"
-                >
-                  Preliminary Review
-                </a>
-              </li>
-              <li v-if="props.rowData.stage === 'CASE' && props.rowData.status === 'Preliminary_review_completed'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'REVIEW_PRELIMINARY_REPORT')"
-                >
-                  Review Preliminary Report
-                </a>
-              </li>
-
-              <li v-if="props.rowData.status === 'submitted_to_JSC'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="downloadPreliminaryReport(props.rowData)"
-                >
-                  Download Preliminary Report
-                </a>
-              </li>
-              <!-- Add Hearing Date -->
-              <li v-if="props.rowData.status === 'Admitted' || props.rowData.status === 'Adjourned' ">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'ADD_HEARING_DATE')"
-                >
-                  Add Hearing Date
-                </a>
-              </li>
-
-              <!-- Hearing Actions -->
-              <li v-if="props.rowData.status === 'Hearing'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'ADJOURN_CASE')"
-                >
-                  Adjourn Case
-                </a>
-              </li>
-
-              <li v-if="props.rowData.status === 'Hearing'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'JUDGMENT_RESERVED')"
-                >
-                  Reserve Judgement
-                </a>
-              </li>
-
-              <li v-if="props.rowData.status === 'Hearing' || props.rowData.status === 'Judgment Reserved'">
-                <a
-                  href="#"
-                  class="dropdown-item"
-                  @click.prevent="openActionModal(props.rowData, 'ADD_JUDGEMENT')"
-                >
-                  Deliver Judgement
-                </a>
-              </li>
-
-              <!-- Close Case -->
-              <li v-if="props.rowData.status === 'Judgment Delivered'">
-                <a
-                  href="#"
-                  class="dropdown-item text-danger"
-                  @click.prevent="openActionModal(props.rowData, 'CLOSE_CASE')"
-                >
-                  Close Case
                 </a>
               </li>
 

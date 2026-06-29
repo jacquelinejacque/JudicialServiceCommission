@@ -44,10 +44,13 @@ export default {
     endpoint() {
     switch (this.action) {
         case 'ASSIGN_REPORT':
-        return `${Const.BASE_URL}/disciplinaryRecords/assignToDirectorLegal`
+        return `${Const.BASE_URL}/disciplinaryRecords/assignToHRM`
 
         case 'REGISTER_CASE':
         return `${Const.BASE_URL}/disciplinaryRecords/registerCase`
+
+        case 'ASSIGN_LEGALTEAM':
+            return `${Const.BASE_URL}/disciplinaryRecords/assignLegalTeam`
 
         case 'PROCESS_CASE':
         return `${Const.BASE_URL}/disciplinaryRecords/processCase`
@@ -81,6 +84,9 @@ export default {
             note: "",
             judgement: ""
         }
+        if (this.action === "ASSIGN_LEGALTEAM") {
+            this.fetchLegalTeamUsers();
+        }
       },
       'form.decision'(value) {
         if (value !== 'admit') {
@@ -102,197 +108,191 @@ export default {
       this.form[field] = e.target.files[0]
     },
 
-    async fetchLegalTeamUsers() {
-    try {
-        this.loadingUsers = true
-
-        const res = await axios.get(`${Const.BASE_URL}/users/list`, {
-        params: {
-            role: 'legalTeam',
-        },
-        headers: {
-            'access-token': localStorage.getItem('accessToken')
-        }
-        })
-
-        if (res.data?.status === 200) {
-        this.legalTeamUsers = res.data.data || []
-        } else {
-        this.legalTeamUsers = []
-        this.showToast(res.data?.message || 'Failed to load legal team users', true)
-        }
-
-    } catch (err) {
-        console.error(err)
-        this.showToast(
-        err?.response?.data?.message || 'Failed to fetch legal team users',
-        true
-        )
-        this.legalTeamUsers = []
-
-    } finally {
-        this.loadingUsers = false
-    }
-    },
+ 
     async submit() {
-    try {
-        this.loading = true
+      try {
+          this.loading = true
 
-        const recordId = this.record?.recordID || this.record?.recordId
+          const recordId = this.record?.recordID || this.record?.recordId
 
-        if (!recordId) {
-        this.showToast('Record ID is missing', true)
-        return
-        }
+          if (!recordId) {
+          this.showToast('Record ID is missing', true)
+          return
+          }
 
-        // ✅ ASSIGN REPORT
-        if (this.action === 'ASSIGN_REPORT') {
-        const res = await axios.post(this.endpoint, {
-            recordID: recordId
-        }, {
-            headers: {
-            'access-token': localStorage.getItem('accessToken')
+          // ✅ ASSIGN REPORT
+          if (this.action === 'ASSIGN_REPORT') {
+          const res = await axios.post(this.endpoint, {
+              recordID: recordId
+          }, {
+              headers: {
+              'access-token': localStorage.getItem('accessToken')
+              }
+          })
+
+          return this.handleResponse(res)
+          }
+
+          // ✅ REGISTER CASE
+          if (this.action === 'REGISTER_CASE') {
+          const payload = {
+              recordID: recordId,
+              officerName: this.form.officerName,
+              designation: this.form.designation,
+              natureOfCharges: this.form.natureOfCharges,
+              pjNumber: this.form.pjNumber,
+              dateEscalated: this.form.dateEscalated,
+              caseAgainst: this.form.caseAgainst,
+              assignedTo: this.form.assignedTo
+          }
+
+          const res = await axios.post(this.endpoint, payload, {
+              headers: {
+              'access-token': localStorage.getItem('accessToken')
+              }
+          })
+
+          return this.handleResponse(res)
+          }
+
+        if (this.action === 'ASSIGN_LEGALTEAM') {
+
+            if (!this.form.assignedTo) {
+                this.showToast("Please select a Legal Team member", true)
+                return
             }
-        })
 
-        return this.handleResponse(res)
+            const payload = {
+                recordID: recordId,
+                assignedTo: this.form.assignedTo
+            }
+
+            const res = await axios.post(
+                this.endpoint,
+                payload,
+                {
+                    headers: {
+                        "access-token": localStorage.getItem("accessToken")
+                    }
+                }
+            )
+
+            return this.handleResponse(res)
         }
 
-        // ✅ REGISTER CASE
-        if (this.action === 'REGISTER_CASE') {
-        const payload = {
+          // REVIEW PRELIMINARY REPORT
+        if (this.action === 'REVIEW_PRELIMINARY_REPORT') {
+          const payload = {
             recordID: recordId,
-            officerName: this.form.officerName,
-            designation: this.form.designation,
-            natureOfCharges: this.form.natureOfCharges,
-            pjNumber: this.form.pjNumber,
-            dateEscalated: this.form.dateEscalated,
-            caseAgainst: this.form.caseAgainst,
-            assignedTo: this.form.assignedTo
-        }
+            decision: this.form.decision,
+            reviewNote: this.form.reviewNote
+          }
 
-        const res = await axios.post(this.endpoint, payload, {
+          if (this.form.decision === 'admit') {
+            payload.panel = this.form.panel
+          }
+
+          const res = await axios.post(this.endpoint, payload, {
             headers: {
-            'access-token': localStorage.getItem('accessToken')
+              'access-token': localStorage.getItem('accessToken'),
+              'Content-Type': 'application/json'
             }
-        })
+          })
 
-        return this.handleResponse(res)
+          return this.handleResponse(res)
         }
 
-        // REVIEW PRELIMINARY REPORT
-      if (this.action === 'REVIEW_PRELIMINARY_REPORT') {
-        const payload = {
-          recordID: recordId,
-          decision: this.form.decision,
-          reviewNote: this.form.reviewNote
+        if (
+          [
+            'ADD_HEARING_DATE',
+            'ADJOURN_CASE',
+            'JUDGMENT_RESERVED',
+            'ADD_JUDGEMENT',
+            'CLOSE_CASE'
+          ].includes(this.action)
+        ) {
+
+          let payload = {}
+
+          if (this.action === 'ADD_HEARING_DATE') {
+            payload = {
+              hearingDate: this.actionPayload.hearingDate
+            }
+          }
+
+          if (this.action === 'ADJOURN_CASE') {
+            payload = {
+              reason: this.actionPayload.reason
+            }
+          }
+
+          if (this.action === 'JUDGMENT_RESERVED') {
+            payload = {
+              note: this.actionPayload.note
+            }
+          }
+
+          if (this.action === 'ADD_JUDGEMENT') {
+            payload = {
+              judgement: this.actionPayload.judgement
+            }
+          }
+
+          if (this.action === 'CLOSE_CASE') {
+            payload = {}
+          }
+
+          const res = await axios.post(this.endpoint, {
+            recordID: recordId,
+            action: this.action,
+            payload
+          }, {
+            headers: {
+              'access-token': localStorage.getItem('accessToken')
+            }
+          })
+
+          if (res.data?.status === 200) {
+            this.showToast(res.data.message || 'Success', false)
+            this.$emit('action-completed', res.data.record)
+          } else {
+            this.showToast(res.data?.message || 'Operation failed', true)
+          }
+
+          return
         }
 
-        if (this.form.decision === 'admit') {
-          payload.panel = this.form.panel
-        }
+          //  FILE UPLOADS (PROCESS + PRELIMINARY)
+          const formData = new FormData()
+          formData.append('recordID', recordId)
 
-        const res = await axios.post(this.endpoint, payload, {
+          if (this.action === 'PROCESS_CASE') {
+          formData.append('summaryFile', this.form.summaryFile)
+          formData.append('boardBriefFile', this.form.boardBriefFile)
+          }
+
+          if (this.action === 'PRELIMINARY_REVIEW') {
+          formData.append('preliminaryReport', this.form.preliminaryReport)
+          }
+
+          const res = await axios.post(this.endpoint, formData, {
           headers: {
-            'access-token': localStorage.getItem('accessToken'),
-            'Content-Type': 'application/json'
+              'access-token': localStorage.getItem('accessToken'),
+              'Content-Type': 'multipart/form-data'
           }
-        })
+          })
 
-        return this.handleResponse(res)
+          return this.handleResponse(res)
+
+      } catch (err) {
+          console.error(err)
+          this.showToast(
+          err?.response?.data?.message || 'Action failed',
+          true
+          )
+      } finally {
+          this.loading = false
       }
-
-      if (
-        [
-          'ADD_HEARING_DATE',
-          'ADJOURN_CASE',
-          'JUDGMENT_RESERVED',
-          'ADD_JUDGEMENT',
-          'CLOSE_CASE'
-        ].includes(this.action)
-      ) {
-
-        let payload = {}
-
-        if (this.action === 'ADD_HEARING_DATE') {
-          payload = {
-            hearingDate: this.actionPayload.hearingDate
-          }
-        }
-
-        if (this.action === 'ADJOURN_CASE') {
-          payload = {
-            reason: this.actionPayload.reason
-          }
-        }
-
-        if (this.action === 'JUDGMENT_RESERVED') {
-          payload = {
-            note: this.actionPayload.note
-          }
-        }
-
-        if (this.action === 'ADD_JUDGEMENT') {
-          payload = {
-            judgement: this.actionPayload.judgement
-          }
-        }
-
-        if (this.action === 'CLOSE_CASE') {
-          payload = {}
-        }
-
-        const res = await axios.post(this.endpoint, {
-          recordID: recordId,
-          action: this.action,
-          payload
-        }, {
-          headers: {
-            'access-token': localStorage.getItem('accessToken')
-          }
-        })
-
-        if (res.data?.status === 200) {
-          this.showToast(res.data.message || 'Success', false)
-          this.$emit('action-completed', res.data.record)
-        } else {
-          this.showToast(res.data?.message || 'Operation failed', true)
-        }
-
-        return
-      }
-
-        //  FILE UPLOADS (PROCESS + PRELIMINARY)
-        const formData = new FormData()
-        formData.append('recordID', recordId)
-
-        if (this.action === 'PROCESS_CASE') {
-        formData.append('summaryFile', this.form.summaryFile)
-        formData.append('boardBriefFile', this.form.boardBriefFile)
-        }
-
-        if (this.action === 'PRELIMINARY_REVIEW') {
-        formData.append('preliminaryReport', this.form.preliminaryReport)
-        }
-
-        const res = await axios.post(this.endpoint, formData, {
-        headers: {
-            'access-token': localStorage.getItem('accessToken'),
-            'Content-Type': 'multipart/form-data'
-        }
-        })
-
-        return this.handleResponse(res)
-
-    } catch (err) {
-        console.error(err)
-        this.showToast(
-        err?.response?.data?.message || 'Action failed',
-        true
-        )
-    } finally {
-        this.loading = false
-    }
     },
     handleResponse(res) {
       const message = res?.data?.message || 'Operation completed'
@@ -302,6 +302,34 @@ export default {
         this.$emit('action-completed', res.data.record)
       } else {
         this.showToast(message, true)
+      }
+    }, 
+
+    async fetchLegalTeamUsers() {
+      try {
+        this.loadingUsers = true;
+
+        const res = await axios.get(
+          `${Const.BASE_URL}/users/list`,
+          {
+            params: {
+              roleName: "legalTeam",
+              start: 0,
+              length: 100
+            },
+            headers: {
+              "access-token": localStorage.getItem("accessToken")
+            }
+          }
+        );
+
+        this.legalTeamUsers = res.data.data || [];
+
+      } catch (err) {
+        console.error(err);
+        this.showToast("Failed to load Legal Team users", true);
+      } finally {
+        this.loadingUsers = false;
       }
     }
   }
@@ -364,16 +392,35 @@ export default {
             </select>
         </div>
 
-        <!-- Assigned To (Dynamic dropdown) -->
-        <div class="col-md-6 mb-3">
-            <label class="form-label">Assigned To</label>
-            <select v-model="form.assignedTo" class="form-select">
-            <option value="" disabled>Select Legal Team Member</option>
-            <option v-for="user in legalTeamUsers" :key="user.userID" :value="user.userID">
-                {{ user.name }}
-            </option>
-            </select>
+
         </div>
+
+        <div v-if="action === 'ASSIGN_LEGALTEAM'">
+
+            <div class="mb-3">
+                <label class="form-label">
+                    Assign to Legal Team Member
+                </label>
+
+                <select
+                    class="form-select"
+                    v-model="form.assignedTo"
+                    required
+                >
+                    <option value="" disabled>
+                        Select Legal Team Member
+                    </option>
+
+                    <option
+                        v-for="user in legalTeamUsers"
+                        :key="user.userID"
+                        :value="user.userID"
+                    >
+                        {{ user.name }}
+                    </option>
+                </select>
+            </div>
+
         </div>
 
         <!-- PROCESS CASE -->
@@ -487,11 +534,11 @@ export default {
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn" data-bs-dismiss="modal">Cancel</button>
+      <div class="modal-footer d-flex justify-content-between">
+        <button class="btn" data-bs-dismiss="modal">No</button>
         <button class="btn btn-primary" :disabled="loading">
           <span v-if="loading">Processing...</span>
-          <span v-else>Submit</span>
+          <span v-else>Yes</span>
         </button>
       </div>
     </div>

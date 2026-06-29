@@ -12,6 +12,9 @@ import GuestVisitApproval from "../models/GuestVisitApprovals.js";
 import VisitorBadge from "../models/VisitorBadges.js";
 import ReceptionDesk from "../models/ReceptionistDesks.js";
 import TicketEscalationResponse from "../models/TicketEscalationResponse.js";
+import Role from "../models/Role.js";
+import Permission from "../models/Permission.js";
+import RolePermission from "../models/RolePermission.js";
 
 dotenv.config();
 
@@ -29,6 +32,9 @@ class DatabaseManager {
     this.guestVisitApproval = null;
     this.receptionDesk = null;
     this.ticketEscalationResponse = null;
+    this.role = null;
+    this.permission = null;
+    this.rolePermission = null;
   }
 
   connect(callback) {
@@ -74,6 +80,10 @@ class DatabaseManager {
       this.visitorBadge = VisitorBadge.init(this.sequelize);
       this.receptionDesk = ReceptionDesk.init(this.sequelize);
       this.ticketEscalationResponse = TicketEscalationResponse.init(this.sequelize);
+      this.role = Role.init(this.sequelize);
+      this.permission = Permission.init(this.sequelize);
+      this.rolePermission = RolePermission.init(this.sequelize);
+
       this.createRelationships();
 
       this.sequelize
@@ -411,6 +421,76 @@ class DatabaseManager {
         onDelete: "RESTRICT",
         onUpdate: "CASCADE",
       });
+
+      // Role -> Users
+      this.role.hasMany(this.user, {
+        as: "users",
+        foreignKey: { name: "roleID", allowNull: false},
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE"
+      });
+
+      this.user.belongsTo(this.role, {
+        as: "role",
+        foreignKey: {  name: "roleID", allowNull: false },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE"
+      });
+
+      this.role.belongsToMany(this.permission, {
+        through: this.rolePermission,
+        foreignKey: "roleID",
+        otherKey: "permissionID",
+        as: "permissions",
+      });
+
+      this.permission.belongsToMany(this.role, {
+        through: this.rolePermission,
+        foreignKey: "permissionID",
+        otherKey: "roleID",
+        as: "roles",
+      });
+
+      this.role.hasMany(this.rolePermission, {
+        as: "rolePermissions",
+        foreignKey: {
+          name: "roleID",
+          allowNull: false,
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.rolePermission.belongsTo(this.role, {
+        as: "role",
+        foreignKey: {
+          name: "roleID",
+          allowNull: false,
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.permission.hasMany(this.rolePermission, {
+        as: "permissionRoles",
+        foreignKey: {
+          name: "permissionID",
+          allowNull: false,
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      this.rolePermission.belongsTo(this.permission, {
+        as: "permission",
+        foreignKey: {
+          name: "permissionID",
+          allowNull: false,
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });      
+      
     } catch (error) {
       console.error("Error in createRelationships method:", error);
     }

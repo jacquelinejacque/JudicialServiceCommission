@@ -2,7 +2,6 @@
 import { Const } from '@/utils/constants'
 import axios from 'axios'
 import Toastify from 'toastify-js'
-//import { Toast } from 'bootstrap/dist/js/bootstrap.bundle'
 import { formatPhoneNumber } from '@/utils/helpers'
 
 export default {
@@ -13,32 +12,46 @@ export default {
         phone: '',
         email: '',
         password: '',
-        role: '',
+        roleID: '',
+        team: 'JSC',
       },
+      teams: [
+        { value: 'JSC', label: 'JSC' },
+        { value: 'eboard', label: 'E-Board' },
+        { value: 'tonerSupport', label: 'Toner Support' },
+        { value: 'networkSupport', label: 'Network Support' },
+        { value: 'softwareSupport', label: 'Software Support' }
+      ],
+      roles: [],
+      loadingRoles: false,
       loading: false,
       formSubmitted: false,
       toastElement: null
     }
   },
+
   computed: {
-  formattedPhoneNumber: {
-    get() {
-      return formatPhoneNumber(this.formData.phone);
-    },
-    set(value) {
-      this.formData.phone = value;
+    formattedPhoneNumber: {
+      get() {
+        return formatPhoneNumber(this.formData.phone)
+      },
+      set(value) {
+        this.formData.phone = value
+      }
     }
-  }
-},
+  },
+
+  mounted() {
+    this.fetchRoles()
+  },
 
   watch: {
-  'formData.phone': function (newVal) {
-    if (newVal) {
-      this.formData.phone = formatPhoneNumber(newVal);
+    'formData.phone': function (newVal) {
+      if (newVal) {
+        this.formData.phone = formatPhoneNumber(newVal)
+      }
     }
-  }
-},
-
+  },
 
   methods: {
     showToast(message, isDanger) {
@@ -49,44 +62,86 @@ export default {
         }
       }).showToast()
     },
+
+    async fetchRoles() {
+      try {
+        this.loadingRoles = true
+
+        const res = await axios.get(`${Const.BASE_URL}/roles/list`, {
+          headers: {
+            'access-token': localStorage.getItem('accessToken')
+          }
+        })
+
+        if (res.data?.status === 200) {
+          this.roles = res.data?.data?.roles || []
+        } else {
+          this.roles = []
+          this.showToast(res.data?.message || 'Failed to load roles', true)
+        }
+
+      } catch (err) {
+        console.error('Fetch roles error:', err)
+        this.roles = []
+        this.showToast(
+          err?.response?.data?.message || 'Failed to fetch roles',
+          true
+        )
+      } finally {
+        this.loadingRoles = false
+      }
+    },
+
     async handleSubmit() {
       try {
-        if (!this.formData.name || !this.formData.phone || !this.formData.email || !this.formData.password || !this.formData.role) {
-        this.showToast('Please fill all required fields.', true)
-        return
+        if (
+          !this.formData.name ||
+          !this.formData.phone ||
+          !this.formData.email ||
+          !this.formData.password ||
+          !this.formData.roleID
+        ) {
+          this.showToast('Please fill all required fields.', true)
+          return
         }
 
         this.loading = true
+
         const submitData = {
-            name: this.formData.name,
-            phone: this.formData.phone,
-            email: this.formData.email,
-            password: this.formData.password,
-            role: this.formData.role
+          name: this.formData.name,
+          phone: this.formData.phone,
+          email: this.formData.email,
+          password: this.formData.password,
+          roleID: this.formData.roleID,
+          team: this.formData.team || 'JSC'
         }
 
-        console.log('Submitting data:', submitData)
-
         const res = await axios.post(`${Const.BASE_URL}/users/create`, submitData, {
-          headers: { 'access-token': localStorage.getItem('accessToken') }
+          headers: {
+            'access-token': localStorage.getItem('accessToken')
+          }
         })
-        console.log(res.data)
+
         if (res.data?.status === 200) {
           this.showToast('User successfully created', false)
-          this.$emit('user-Added');
+          this.resetForm()
+          this.$emit('user-Added')
         } else {
           const message = res.data.message || 'Failed to create user'
           this.showToast(message, true)
         }
       } catch (error) {
         console.error('Error:', error.response?.data || error.message)
-        const message = error.response?.data?.message || 'Failed to create user, please try again'
+        const message =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Failed to create user, please try again'
+
         this.showToast(message, true)
       } finally {
         this.loading = false
       }
     },
-
 
     resetForm() {
       this.formData = {
@@ -94,7 +149,8 @@ export default {
         phone: '',
         email: '',
         password: '',
-        role: '',
+        roleID: '',
+        team: 'JSC'
       }
 
       this.formSubmitted = true
@@ -147,23 +203,51 @@ export default {
             </div>
 
             <div class="col-md-6 mb-3">
-            <label class="form-label text-weight-1000">Select Role</label>
-                <select v-model="formData.role" class="form-control">
-                <option value="">Select Role</option>
-                <option value="admin">Admin</option>
-                <option value="agent">Agent</option>
-                <option value="normalUser">Normal User</option>
-                </select>
-           
+              <label class="form-label text-weight-1000">Select Role</label>
+
+              <select
+                v-model="formData.roleID"
+                class="form-control"
+                :disabled="loadingRoles"
+              >
+                <option value="">
+                  {{ loadingRoles ? 'Loading roles...' : 'Select Role' }}
+                </option>
+
+                <option
+                  v-for="role in roles"
+                  :key="role.roleID"
+                  :value="role.roleID"
+                >
+                  {{ role.roleName }}
+                </option>
+              </select>
             </div>
 
+            <div class="col-md-6 mb-3">
+              <label for="team" class="form-label">Team</label>
+
+              <select
+                id="team"
+                class="form-control"
+                v-model="formData.team"
+              >
+                <option
+                  v-for="team in teams"
+                  :key="team.value"
+                  :value="team.value"
+                >
+                  {{ team.label }}
+                </option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn me-auto" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary" :disabled="loading">
             <span v-if="loading">Submitting...</span>
-            <span v-if="!loading">Submit</span>
+            <span v-if="!loading">Add User</span>
           </button>
         </div>
       </div>

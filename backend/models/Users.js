@@ -22,12 +22,16 @@ class User {
       password: {
         type: DataTypes.STRING,
       },
-      role: {
-        type: DataTypes.ENUM,
-        allowNull: false,
-        values: ['admin', 'normalUser', 'agent', 'registrar', 'directorLegal', 'legalTeam', 'boardsDirector', 'receptionist'],
-        defaultValue: 'normalUser'
-      },   
+      roleID: {
+        type: DataTypes.UUID,
+        allowNull: false
+      },
+      // role: {
+      //   type: DataTypes.ENUM,
+      //   allowNull: false,
+      //   values: ['admin', 'normalUser', 'agent', 'registrar', 'directorLegal', 'legalTeam', 'boardsDirector', 'receptionist'],
+      //   defaultValue: 'normalUser'
+      // },   
       team: {
         type: DataTypes.ENUM,
         allowNull: false,

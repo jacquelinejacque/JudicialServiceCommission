@@ -29,13 +29,13 @@ export default {
 
   computed: {
     isRegistrar() {
-      return this.currentUser?.role?.toLowerCase() === 'registrar'
+      return this.currentUser?.role?.roleName?.toLowerCase() === 'registrar'
     },
     isLegalTeam() {
-      return this.currentUser?.role?.toLowerCase() === 'legalteam'
+      return this.currentUser?.role?.roleName?.toLowerCase() === 'legalteam'
     },
     isDirectorLegal() {
-      return this.currentUser?.role?.toLowerCase() === 'directorlegal'
+      return this.currentUser?.role?.roleName?.toLowerCase() === 'directorlegal'
     }
   },
 

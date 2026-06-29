@@ -17,6 +17,19 @@ export default {
     }
   },
 
+  computed: {
+    currentUser() {
+      return JSON.parse(localStorage.getItem('user') || '{}')
+    },
+
+    permissions() {
+      return this.currentUser?.permissions || []
+    },
+
+    canCreateReport() {
+      return this.permissions.includes('disciplinaryRecords.create')
+    }
+  },
   methods: {
     showToast(message, isDanger) {
       Toastify({
@@ -34,6 +47,10 @@ export default {
 
     async handleSubmit() {
     try {
+        if (!this.canCreateReport) {
+          this.showToast('You do not have permission to create reports.', true)
+          return
+        }
         if (!this.formData.source) {
         this.showToast('Source is required.', true)
         return

@@ -15,6 +15,9 @@ import DisciplinaryHistoryHandler from './DisciplinaryHistoryHandler.js'
 import GuestVisitsHandler from './GuestVisitsHandler.js'
 import VisitorBadgesHandler from './VisitorBadgesHandler.js'
 import ReceptionistDeskHandler from './ReceptionistDeskHandler.js'
+import RoleHandler from './RoleHandler.js'
+import PermissionHandler from './PermissionHandler.js'
+import RolePermissionHandler from './RolePermissionHandler.js'
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -46,7 +49,9 @@ export function init(app) {
   router.use('/guestsVisits', GuestVisitsHandler)
   router.use('/visitorBadges', VisitorBadgesHandler)
   router.use('/receptionistDesks', ReceptionistDeskHandler)
-
+  router.use('/roles', RoleHandler)
+  router.use('/permissions', PermissionHandler)
+  router.use('/rolePermissions', RolePermissionHandler)
 
   router.all('/', function (request, res) {
     res.status(404)

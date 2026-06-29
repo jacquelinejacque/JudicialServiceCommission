@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import mime from "mime-types";
 import ExcelJS from "exceljs";
+import PermissionService from "../lib/PermissionService.js";
 
 class DisciplinaryRecordLogic {
   static async createReport(body, authUser, file, callback) {
@@ -19,6 +20,20 @@ class DisciplinaryRecordLogic {
           message: "Unauthorized"
         });
       }
+
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.create"
+      );
+
+  if (!permissionCheck.allowed) {
+    const roleName = authUser?.role?.roleName || authUser?.roleName || "this role";
+
+    return callback({
+      status: permissionCheck.status,
+      message: `Access denied, users with role '${roleName}' are not allowed to create reports`
+    });
+  }
 
       if (Utils.isEmpty(body.source)) {
         return callback({
@@ -60,7 +75,7 @@ class DisciplinaryRecordLogic {
 
       const record = await DatabaseManager.disciplinaryRecord.create({
         stage: "REPORT",
-        status: "RECEIVED",
+        status: "Received",
         source: body.source,
         complainantName: body.source === "PUBLIC" ? body.complainantName : null,
         title: body.title,
@@ -84,22 +99,32 @@ class DisciplinaryRecordLogic {
         }
       });
 
-      // Return success immediately
       callback({
         status: Consts.httpCodeSuccess,
         message: "Report received successfully",
         record
       });
 
-      // Send emails after response
       setImmediate(async () => {
         try {
           const registrars = await DatabaseManager.user.findAll({
-            where: { role: "registrar" },
-            attributes: ["userID", "name", "email"]
+            attributes: ["userID", "name", "email"],
+            include: [
+              {
+                model: DatabaseManager.role,
+                as: "role",
+                attributes: ["roleID", "roleName"],
+                where: {
+                  roleName: "registrar"
+                },
+                required: true
+              }
+            ]
           });
 
-          const validRegistrars = (registrars || []).filter((user) => user.email);
+          const validRegistrars = (registrars || []).filter(
+            (user) => user.email
+          );
 
           await Promise.all(
             validRegistrars.map((registrar) =>
@@ -111,7 +136,7 @@ class DisciplinaryRecordLogic {
                     title: record.title,
                     source: record.source,
                     complainantName: record.complainantName,
-                    receivedBy: record.receivedBy,
+                    receivedBy: authUser.name,
                     receivedDate: record.receivedDate,
                     recordID: record.recordID
                   },
@@ -187,7 +212,17 @@ class DisciplinaryRecordLogic {
           message: "Unauthorized"
         });
       }
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.update"
+      );
 
+      if (!permissionCheck.allowed) {
+        return callback({
+          status: permissionCheck.status,
+          message: "You do not have permission to update disciplinary records"
+        });
+      }
       if (Utils.isEmpty(body.recordID)) {
         return callback({
           status: 400,
@@ -341,309 +376,309 @@ class DisciplinaryRecordLogic {
     }
   }
 
-static buildReportsQuery(param) {
-  const baseQuery = {
-    reportFile: { [Op.ne]: null },
-  };
+  static buildReportsQuery(param) {
+    const baseQuery = {
+      reportFile: { [Op.ne]: null },
+    };
 
-  let filteredQuery = { ...baseQuery };
+    let filteredQuery = { ...baseQuery };
 
-  // direct filter by stage
-  if (!Utils.isEmpty(param.stage)) {
-    filteredQuery.stage = param.stage;
-  }
-
-  // direct filter by source
-  if (!Utils.isEmpty(param.source)) {
-    filteredQuery.source = param.source;
-  }
-
-  // direct filter by status
-  if (!Utils.isEmpty(param.status)) {
-    filteredQuery.status = param.status;
-  }
-
-  // direct filter by title
-  if (!Utils.isEmpty(param.title)) {
-    filteredQuery.title = { [Op.like]: `%${param.title}%` };
-  }
-
-  // direct filter by complainantName
-  if (!Utils.isEmpty(param.complainantName)) {
-    filteredQuery.complainantName = { [Op.like]: `%${param.complainantName}%` };
-  }
-
-  if (!Utils.isEmpty(param.fileNumber)) {
-    filteredQuery.fileNumber = { [Op.like]: `%${param.fileNumber}%` };
-  }
-
-  if (!Utils.isEmpty(param.assignedTo)) {
-    filteredQuery.assignedTo = { [Op.like]: `%${param.assignedTo}%` };
-  }
-
-  if (!Utils.isEmpty(param.panel)) {
-    filteredQuery.panel = { [Op.like]: `%${param.panel}%` };
-  }
-
-  // direct filter by receivedBy
-  if (!Utils.isEmpty(param.receivedBy)) {
-    filteredQuery.receivedBy = { [Op.like]: `%${param.receivedBy}%` };
-  }
-
-  // direct filter by receivedDate using custom range or preset range
-  if (!Utils.isEmpty(param.startDate) || !Utils.isEmpty(param.endDate)) {
-    const receivedDateFilter = {};
-
-    if (!Utils.isEmpty(param.startDate)) {
-      const startDate = new Date(param.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      receivedDateFilter[Op.gte] = startDate;
+    // direct filter by stage
+    if (!Utils.isEmpty(param.stage)) {
+      filteredQuery.stage = param.stage;
     }
 
-    if (!Utils.isEmpty(param.endDate)) {
-      const endDate = new Date(param.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      receivedDateFilter[Op.lte] = endDate;
+    // direct filter by source
+    if (!Utils.isEmpty(param.source)) {
+      filteredQuery.source = param.source;
     }
 
-    filteredQuery.receivedDate = receivedDateFilter;
-  } else if (!Utils.isEmpty(param.dateRange)) {
-    const now = new Date();
-    const startDate = new Date();
-
-    switch (param.dateRange) {
-      case "1_month":
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      case "3_months":
-        startDate.setDate(startDate.getDate() - (3 * 30));
-        break;
-      case "6_months":
-        startDate.setDate(startDate.getDate() - (6 * 30));
-        break;
-      case "12_months":
-        startDate.setDate(startDate.getDate() - (12 * 30));
-        break;
-      default:
-        break;
+    // direct filter by status
+    if (!Utils.isEmpty(param.status)) {
+      filteredQuery.status = param.status;
     }
 
-    if (["1_month", "3_months", "6_months", "12_months"].includes(param.dateRange)) {
-      startDate.setHours(0, 0, 0, 0);
-      now.setHours(23, 59, 59, 999);
+    // direct filter by title
+    if (!Utils.isEmpty(param.title)) {
+      filteredQuery.title = { [Op.like]: `%${param.title}%` };
+    }
 
-      filteredQuery.receivedDate = {
-        [Op.gte]: startDate,
-        [Op.lte]: now
+    // direct filter by complainantName
+    if (!Utils.isEmpty(param.complainantName)) {
+      filteredQuery.complainantName = { [Op.like]: `%${param.complainantName}%` };
+    }
+
+    if (!Utils.isEmpty(param.fileNumber)) {
+      filteredQuery.fileNumber = { [Op.like]: `%${param.fileNumber}%` };
+    }
+
+    if (!Utils.isEmpty(param.assignedTo)) {
+      filteredQuery.assignedTo = { [Op.like]: `%${param.assignedTo}%` };
+    }
+
+    if (!Utils.isEmpty(param.panel)) {
+      filteredQuery.panel = { [Op.like]: `%${param.panel}%` };
+    }
+
+    // direct filter by receivedBy
+    if (!Utils.isEmpty(param.receivedBy)) {
+      filteredQuery.receivedBy = { [Op.like]: `%${param.receivedBy}%` };
+    }
+
+    // direct filter by receivedDate using custom range or preset range
+    if (!Utils.isEmpty(param.startDate) || !Utils.isEmpty(param.endDate)) {
+      const receivedDateFilter = {};
+
+      if (!Utils.isEmpty(param.startDate)) {
+        const startDate = new Date(param.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        receivedDateFilter[Op.gte] = startDate;
+      }
+
+      if (!Utils.isEmpty(param.endDate)) {
+        const endDate = new Date(param.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        receivedDateFilter[Op.lte] = endDate;
+      }
+
+      filteredQuery.receivedDate = receivedDateFilter;
+    } else if (!Utils.isEmpty(param.dateRange)) {
+      const now = new Date();
+      const startDate = new Date();
+
+      switch (param.dateRange) {
+        case "1_month":
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        case "3_months":
+          startDate.setDate(startDate.getDate() - (3 * 30));
+          break;
+        case "6_months":
+          startDate.setDate(startDate.getDate() - (6 * 30));
+          break;
+        case "12_months":
+          startDate.setDate(startDate.getDate() - (12 * 30));
+          break;
+        default:
+          break;
+      }
+
+      if (["1_month", "3_months", "6_months", "12_months"].includes(param.dateRange)) {
+        startDate.setHours(0, 0, 0, 0);
+        now.setHours(23, 59, 59, 999);
+
+        filteredQuery.receivedDate = {
+          [Op.gte]: startDate,
+          [Op.lte]: now
+        };
+      }
+    }
+
+    // DataTables/global search
+    if (!Utils.isEmpty(param["search[value]"])) {
+      const searchValue = param["search[value]"];
+
+      filteredQuery = {
+        [Op.and]: [
+          filteredQuery,
+          {
+            [Op.or]: [
+              { stage: { [Op.like]: `%${searchValue}%` } },
+              { source: { [Op.like]: `%${searchValue}%` } },
+              { complainantName: { [Op.like]: `%${searchValue}%` } },
+              { fileNumber: { [Op.like]: `%${searchValue}%` } },
+              { reportFile: { [Op.like]: `%${searchValue}%` } },
+              { status: { [Op.like]: `%${searchValue}%` } },
+              { receivedBy: { [Op.like]: `%${searchValue}%` } },
+              { title: { [Op.like]: `%${searchValue}%` } },
+              { panel: { [Op.like]: `%${searchValue}%` } },
+              { assignedTo: { [Op.like]: `%${searchValue}%` } },
+            ],
+          },
+        ],
       };
     }
-  }
 
-  // DataTables/global search
-  if (!Utils.isEmpty(param["search[value]"])) {
-    const searchValue = param["search[value]"];
-
-    filteredQuery = {
-      [Op.and]: [
-        filteredQuery,
-        {
-          [Op.or]: [
-            { stage: { [Op.like]: `%${searchValue}%` } },
-            { source: { [Op.like]: `%${searchValue}%` } },
-            { complainantName: { [Op.like]: `%${searchValue}%` } },
-            { fileNumber: { [Op.like]: `%${searchValue}%` } },
-            { reportFile: { [Op.like]: `%${searchValue}%` } },
-            { status: { [Op.like]: `%${searchValue}%` } },
-            { receivedBy: { [Op.like]: `%${searchValue}%` } },
-            { title: { [Op.like]: `%${searchValue}%` } },
-            { panel: { [Op.like]: `%${searchValue}%` } },
-            { assignedTo: { [Op.like]: `%${searchValue}%` } },
-          ],
-        },
-      ],
+    return {
+      baseQuery,
+      filteredQuery
     };
   }
 
-  return {
-    baseQuery,
-    filteredQuery
-  };
-}
+  static listReports(param, callback) {
+    const { baseQuery, filteredQuery } = this.buildReportsQuery(param);
 
-static listReports(param, callback) {
-  const { baseQuery, filteredQuery } = this.buildReportsQuery(param);
-
-  async.waterfall(
-    [
-      function (done) {
-        DatabaseManager.disciplinaryRecord
-          .count({ where: baseQuery })
-          .then((totalRecords) => done(null, totalRecords))
-          .catch((err) => done(err));
-      },
-
-      function (totalRecords, done) {
-        DatabaseManager.disciplinaryRecord
-          .count({ where: filteredQuery })
-          .then((filteredRecords) => done(null, totalRecords, filteredRecords))
-          .catch((err) => done(err));
-      },
-
-      function (totalRecords, filteredRecords, done) {
-        const offset = parseInt(param.start, 10) || 0;
-        const limit = parseInt(param.length, 10) || 10;
-
-        DatabaseManager.disciplinaryRecord
-          .findAll({
-            where: filteredQuery,
-            attributes: [
-              "recordID",
-              "stage",
-              "title",
-              "fileNumber",
-              "status",
-              "source",
-              "complainantName",
-              "panel",
-              "assignedTo",
-              "reportFile",
-              "receivedBy",
-              "receivedDate",
-              "createdAt",
-            ],
-            order: [["receivedDate", "DESC"]],
-            offset,
-            limit,
-          })
-          .then((data) => done(null, totalRecords, filteredRecords, data))
-          .catch((err) => done(err));
-      },
-    ],
-    function (err, totalRecords, filteredRecords, data) {
-      if (err) {
-        return callback({
-          status: Consts.httpCodeServerError,
-          message: "Failed to fetch reports",
-          error: err,
-          data: [],
-          recordsTotal: 0,
-          recordsFiltered: 0,
-        });
-      }
-
-      return callback({
-        status: Consts.httpCodeSuccess,
-        message: "Reports fetched successfully",
-        data,
-        draw: parseInt(param.draw, 10) || 0,
-        recordsTotal: totalRecords,
-        recordsFiltered: filteredRecords,
-      });
-    }
-  );
-}
-
-static exportReports(param, callback) {
-  const { filteredQuery } = this.buildReportsQuery(param);
-
-  async.waterfall(
-    [
-      function (done) {
-        DatabaseManager.disciplinaryRecord
-          .findAll({
-            where: filteredQuery,
-            attributes: [
-              "recordID",
-              "stage",
-              "title",
-              "fileNumber",
-              "status",
-              "source",
-              "complainantName",
-              "panel",
-              "assignedTo",
-              "receivedBy",
-              "receivedDate",
-              "createdAt",
-            ],
-            order: [["receivedDate", "DESC"]],
-          })
-          .then((reports) => done(null, reports))
-          .catch((err) => done(err));
-      },
-
-      function (reports, done) {
-        try {
-          const workbook = new ExcelJS.Workbook();
-          const worksheet = workbook.addWorksheet("Filtered Reports");
-
-          worksheet.columns = [
-            { header: "No", key: "no", width: 8 },
-            { header: "Record ID", key: "recordID", width: 40 },
-            { header: "Stage", key: "stage", width: 15 },
-            { header: "Title", key: "title", width: 30 },
-            { header: "File Number", key: "fileNumber", width: 25 },
-            { header: "Status", key: "status", width: 25 },
-            { header: "Source", key: "source", width: 15 },
-            { header: "Complainant Name", key: "complainantName", width: 25 },
-            { header: "Panel", key: "panel", width: 15 },
-            { header: "Assigned To", key: "assignedTo", width: 40 },
-            { header: "Received By", key: "receivedBy", width: 40 },
-            { header: "Received Date", key: "receivedDate", width: 22 },
-            { header: "Created At", key: "createdAt", width: 22 },
-          ];
-
-          reports.forEach((item, index) => {
-            worksheet.addRow({
-              no: index + 1,
-              recordID: item.recordID || "",
-              stage: item.stage || "",
-              title: item.title || "",
-              fileNumber: item.fileNumber || "",
-              status: item.status || "",
-              source: item.source || "",
-              complainantName: item.complainantName || "",
-              panel: item.panel || "",
-              assignedTo: item.assignedTo || "",
-              receivedBy: item.receivedBy || "",
-              receivedDate: item.receivedDate
-                ? new Date(item.receivedDate).toLocaleString()
-                : "",
-              createdAt: item.createdAt
-                ? new Date(item.createdAt).toLocaleString()
-                : "",
-            });
-          });
-
-          worksheet.getRow(1).font = { bold: true };
-
-          workbook.xlsx.writeBuffer()
-            .then((fileBuffer) => done(null, fileBuffer))
+    async.waterfall(
+      [
+        function (done) {
+          DatabaseManager.disciplinaryRecord
+            .count({ where: baseQuery })
+            .then((totalRecords) => done(null, totalRecords))
             .catch((err) => done(err));
-        } catch (err) {
-          done(err);
+        },
+
+        function (totalRecords, done) {
+          DatabaseManager.disciplinaryRecord
+            .count({ where: filteredQuery })
+            .then((filteredRecords) => done(null, totalRecords, filteredRecords))
+            .catch((err) => done(err));
+        },
+
+        function (totalRecords, filteredRecords, done) {
+          const offset = parseInt(param.start, 10) || 0;
+          const limit = parseInt(param.length, 10) || 10;
+
+          DatabaseManager.disciplinaryRecord
+            .findAll({
+              where: filteredQuery,
+              attributes: [
+                "recordID",
+                "stage",
+                "title",
+                "fileNumber",
+                "status",
+                "source",
+                "complainantName",
+                "panel",
+                "assignedTo",
+                "reportFile",
+                "receivedBy",
+                "receivedDate",
+                "createdAt",
+              ],
+              order: [["receivedDate", "DESC"]],
+              offset,
+              limit,
+            })
+            .then((data) => done(null, totalRecords, filteredRecords, data))
+            .catch((err) => done(err));
+        },
+      ],
+      function (err, totalRecords, filteredRecords, data) {
+        if (err) {
+          return callback({
+            status: Consts.httpCodeServerError,
+            message: "Failed to fetch reports",
+            error: err,
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0,
+          });
         }
-      }
-    ],
-    function (err, fileBuffer) {
-      if (err) {
+
         return callback({
-          status: Consts.httpCodeServerError,
-          message: "Failed to export reports",
-          error: err.message || err,
+          status: Consts.httpCodeSuccess,
+          message: "Reports fetched successfully",
+          data,
+          draw: parseInt(param.draw, 10) || 0,
+          recordsTotal: totalRecords,
+          recordsFiltered: filteredRecords,
         });
       }
+    );
+  }
 
-      return callback({
-        status: Consts.httpCodeSuccess,
-        message: "Reports exported successfully",
-        fileBuffer,
-      });
-    }
-  );
-}
+  static exportReports(param, callback) {
+    const { filteredQuery } = this.buildReportsQuery(param);
 
-  static async assignToDirectorLegal(body, authUser, callback) {
+    async.waterfall(
+      [
+        function (done) {
+          DatabaseManager.disciplinaryRecord
+            .findAll({
+              where: filteredQuery,
+              attributes: [
+                "recordID",
+                "stage",
+                "title",
+                "fileNumber",
+                "status",
+                "source",
+                "complainantName",
+                "panel",
+                "assignedTo",
+                "receivedBy",
+                "receivedDate",
+                "createdAt",
+              ],
+              order: [["receivedDate", "DESC"]],
+            })
+            .then((reports) => done(null, reports))
+            .catch((err) => done(err));
+        },
+
+        function (reports, done) {
+          try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet("Filtered Reports");
+
+            worksheet.columns = [
+              { header: "No", key: "no", width: 8 },
+              { header: "Record ID", key: "recordID", width: 40 },
+              { header: "Stage", key: "stage", width: 15 },
+              { header: "Title", key: "title", width: 30 },
+              { header: "File Number", key: "fileNumber", width: 25 },
+              { header: "Status", key: "status", width: 25 },
+              { header: "Source", key: "source", width: 15 },
+              { header: "Complainant Name", key: "complainantName", width: 25 },
+              { header: "Panel", key: "panel", width: 15 },
+              { header: "Assigned To", key: "assignedTo", width: 40 },
+              { header: "Received By", key: "receivedBy", width: 40 },
+              { header: "Received Date", key: "receivedDate", width: 22 },
+              { header: "Created At", key: "createdAt", width: 22 },
+            ];
+
+            reports.forEach((item, index) => {
+              worksheet.addRow({
+                no: index + 1,
+                recordID: item.recordID || "",
+                stage: item.stage || "",
+                title: item.title || "",
+                fileNumber: item.fileNumber || "",
+                status: item.status || "",
+                source: item.source || "",
+                complainantName: item.complainantName || "",
+                panel: item.panel || "",
+                assignedTo: item.assignedTo || "",
+                receivedBy: item.receivedBy || "",
+                receivedDate: item.receivedDate
+                  ? new Date(item.receivedDate).toLocaleString()
+                  : "",
+                createdAt: item.createdAt
+                  ? new Date(item.createdAt).toLocaleString()
+                  : "",
+              });
+            });
+
+            worksheet.getRow(1).font = { bold: true };
+
+            workbook.xlsx.writeBuffer()
+              .then((fileBuffer) => done(null, fileBuffer))
+              .catch((err) => done(err));
+          } catch (err) {
+            done(err);
+          }
+        }
+      ],
+      function (err, fileBuffer) {
+        if (err) {
+          return callback({
+            status: Consts.httpCodeServerError,
+            message: "Failed to export reports",
+            error: err.message || err,
+          });
+        }
+
+        return callback({
+          status: Consts.httpCodeSuccess,
+          message: "Reports exported successfully",
+          fileBuffer,
+        });
+      }
+    );
+  }
+
+  static async assignToHRM(body, authUser, callback) {
     try {
       if (!authUser || !authUser.userID) {
         return callback({
@@ -652,10 +687,15 @@ static exportReports(param, callback) {
         });
       }
 
-      if (authUser.role !== "registrar") {
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.assignToHRM"
+      );
+
+      if (!permissionCheck.allowed) {
         return callback({
-          status: 403,
-          message: "Only a registrar can assign reports to Director Legal"
+          status: permissionCheck.status,
+          message: "You do not have permission to assign reports to Human Resource Manager"
         });
       }
 
@@ -685,17 +725,26 @@ static exportReports(param, callback) {
         });
       }
 
-      const director = await DatabaseManager.user.findOne({
+      const HRM = await DatabaseManager.user.findOne({
         where: {
-          role: "directorLegal",
           status: "active"
-        }
+        },
+        include: [
+          {
+            model: DatabaseManager.role,
+            as: "role",
+            where: {
+              roleName: "humanResourceManager"
+            },
+            attributes: ["roleID", "roleName"]
+          }
+        ]
       });
 
-      if (!director) {
+      if (!HRM) {
         return callback({
           status: 404,
-          message: "Director Legal not found"
+          message: "Human Resource Manager not found"
         });
       }
 
@@ -704,7 +753,7 @@ static exportReports(param, callback) {
 
       await DatabaseManager.disciplinaryRecord.update(
         {
-          assignedTo: director.userID,
+          assignedTo: HRM.userID,
           status: "Under_review",
           receivedAt: now
         },
@@ -719,11 +768,11 @@ static exportReports(param, callback) {
 
       await DatabaseManager.disciplinaryHistory.create({
         recordID: record.recordID,
-        action: "ASSIGNED_TO_DIRECTOR_LEGAL",
+        action: "ASSIGNED_TO_HUMAN_RESOURCE_MANAGER",
         performedBy: authUser.userID,
         previousValue,
         newValue: {
-          assignedTo: director.userID,
+          assignedTo: HRM.userID,
           status: "Under_review",
           stage: record.stage
         }
@@ -731,19 +780,19 @@ static exportReports(param, callback) {
 
       callback({
         status: Consts.httpCodeSuccess,
-        message: "Report successfully assigned to Director Legal",
+        message: "Report successfully assigned to Human Resource Manager",
         record: updatedRecord
       });
 
       setImmediate(async () => {
         try {
-          if (director.email) {
+          if (HRM.email) {
             await EmailService.sendMail({
-              to: director.email,
+              to: HRM.email,
               subject: "New Disciplinary Report Assigned",
               html: `
                 <div>
-                  <p>Hello ${director.name || "Director Legal"},</p>
+                  <p>Hello ${HRM.name || "Human Resource Manager"},</p>
                   <p>A disciplinary report has been assigned to you for further action.</p>
                   <p><strong>Report ID:</strong> ${record.recordID}</p>
                   <p><strong>Title:</strong> ${record.title || "_"}</p>
@@ -756,12 +805,12 @@ static exportReports(param, callback) {
             });
           }
         } catch (emailErr) {
-          console.error("Failed to send Director Legal email:", emailErr);
+          console.error("Failed to send Human Resource Manager email:", emailErr);
         }
       });
 
     } catch (err) {
-      console.error("Assign to Director Legal error:", err);
+      console.error("Assign to Human Resource Manager error:", err);
 
       return callback({
         status: Consts.httpCodeServerError,
@@ -778,11 +827,16 @@ static exportReports(param, callback) {
         throw new Error("Unauthorized: Missing user context");
       }
 
-      // Only Director Legal can register case
-      if (authUser.role !== "directorLegal") {
+      // Only HR practitioners can register case
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.registerCase"
+      );
+
+      if (!permissionCheck.allowed) {
         return callback({
           status: Consts.unAuthorized,
-          message: "Only Director Legal can register a case"
+          message: "Only HR practitioners can register a case"
         });
       }
 
@@ -801,7 +855,7 @@ static exportReports(param, callback) {
         "pjNumber",
         "dateEscalated",
         "caseAgainst",
-        "assignedTo"
+        
       ];
 
       for (const field of requiredFields) {
@@ -845,6 +899,25 @@ static exportReports(param, callback) {
         return callback({
           status: 400,
           message: `Cannot register case at stage ${record.stage} with status ${record.status}`
+        });
+      }
+
+      const directorLegal = await DatabaseManager.user.findOne({
+        include: [
+          {
+            model: DatabaseManager.role,
+            as: "role",
+            where: {
+              roleName: "directorLegal"
+            }
+          }
+        ]
+      });
+
+      if (!directorLegal) {
+        return callback({
+          status: 400,
+          message: "No Director Legal user configured in the system"
         });
       }
 
@@ -930,6 +1003,120 @@ static exportReports(param, callback) {
     }
   }
 
+  static async assignLegalTeam(body, authUser, callback) {
+    try {
+      // 1️⃣ Validate authenticated user
+      if (!authUser || !authUser.userID) {
+        throw new Error("Unauthorized: Missing user context");
+      }
+
+      // Only Director Legal can assign report
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.assignLegalTeam"
+      );
+
+      if (!permissionCheck.allowed) {
+        return callback({
+          status: Consts.unAuthorized,
+          message: "Only Director Legal can assign a report"
+        });
+      } 
+
+      // 2️⃣ Validate inputs
+      if (Utils.isEmpty(body.recordID)) {
+        return callback({
+          status: 400,
+          message: "recordID is required"
+        });
+      }
+
+      if (Utils.isEmpty(body.assignedTo)) {
+        return callback({
+          status: 400,
+          message: "assignedTo is required"
+        });
+      }
+
+      // 3️⃣ Find existing disciplinary record
+      const record = await DatabaseManager.disciplinaryRecord.findOne({
+        where: { recordID: body.recordID }
+      });
+
+      if (!record) {
+        return callback({
+          status: 404,
+          message: "Record not found"
+        });
+      }
+
+      // Ensure report is assignable
+      if (record.stage !== "CASE") {
+        return callback({
+          status: 400,
+          message: `Cannot assign record at stage ${record.case}`
+        });
+      }
+
+      // 4️⃣ Confirm assigned user exists and is legalTeam
+      const legalTeamUser = await DatabaseManager.user.findOne({
+        where: {
+          userID: body.assignedTo
+        },
+        include: [
+          {
+            model: DatabaseManager.role,
+            as: "role",
+            where: {
+              roleName: "legalTeam"
+            }
+          }
+        ]
+      });
+
+      if (!legalTeamUser) {
+        return callback({
+          status: 400,
+          message: "Assigned user must be a Legal Team member"
+        });
+      }
+
+      // 5️⃣ Store previous values for audit
+      const previousValue = record.toJSON();
+
+      // 6️⃣ Update record assignment
+      await record.update({
+        assignedTo: legalTeamUser.userID,
+        status: "Assigned"
+      });
+
+      // 7️⃣ Audit trail
+      await DatabaseManager.disciplinaryHistory.create({
+        recordID: record.recordID,
+        action: "REPORT_ASSIGNED",
+        performedBy: authUser.userID,
+        previousValue,
+        newValue: record.toJSON()
+      });
+
+      // 8️⃣ Return success
+      return callback({
+        status: Consts.httpCodeSuccess,
+        message: "Report assigned successfully",
+        record
+      });
+
+    } catch (err) {
+      console.error("Assign report error:", err);
+
+      return callback({
+        status: Consts.httpCodeServerError,
+        message: "Failed to assign report",
+        error: err.message || err
+      });
+    }
+  }
+
   static async processCase(body, authUser, files, callback) {
     try {
       // 1️⃣ Validate auth user
@@ -960,22 +1147,53 @@ static exportReports(param, callback) {
         });
       }
 
-      // 5️⃣ Validate stage + status
-      if (record.stage !== "CASE" || record.status !== "Registered") {
+      //  Authorization:
+      // DirectorLegal can process a case in registered state.
+      // legalTeam can only process cases assigned to them.
+      const canLegalTeamProcess =
+        PermissionService.hasPermission(
+          authUser,
+          "disciplinaryRecords.processCase"
+        ) &&
+        record.status === "Assigned" &&
+        record.assignedTo === authUser.userID;
+
+      const canDirectorProcess =
+        PermissionService.hasPermission(
+          authUser,
+          "disciplinaryRecords.directorProcessCase"
+        ) &&
+        record.status === "Registered";
+
+      if (!canLegalTeamProcess && !canDirectorProcess) {
+        return callback({
+          status: 403,
+          message: "You do not have permission to process this case at its current status"
+        });
+      } 
+
+      //  Validate stage + status
+      if (record.stage !== "CASE") {
         return callback({
           status: 400,
-          message: `Cannot process case at stage ${record.stage} with status ${record.status}`
+          message: `Cannot process record at stage ${record.stage}`
         });
       }
 
-      // 6️⃣ Handle inputs (text OR file)
+      if (!["Assigned", "Registered"].includes(record.status)) {
+        return callback({
+          status: 400,
+          message: `Cannot process case with status ${record.status}`
+        });
+      }
+
+      //  Handle inputs (text OR file)
       const summaryText = body.summary || null;
       const boardBriefText = body.boardBrief || null;
 
       const summaryFile = files?.summaryFile?.[0]?.path || null;
       const boardBriefFile = files?.boardBriefFile?.[0]?.path || null;
 
-      // At least ONE must exist
       if (!summaryText && !summaryFile) {
         return callback({
           status: 400,
@@ -993,13 +1211,13 @@ static exportReports(param, callback) {
       // 7️⃣ Store previous values
       const previousValue = record.toJSON();
 
-      // 8️⃣ Update record → ONLY status + processing data
+      // 8️⃣ Update record
       await record.update({
         status: "Processed",
         summary: summaryText,
-        summaryFile: summaryFile,
+        summaryFile,
         boardBrief: boardBriefText,
-        boardBriefFile: boardBriefFile
+        boardBriefFile
       });
 
       // 9️⃣ Audit trail
@@ -1109,6 +1327,17 @@ static exportReports(param, callback) {
         });
       }
 
+      const permissionCheck = PermissionService.authorize(
+        authUser,
+        "disciplinaryRecords.preliminaryReview"
+      );
+
+      if (!permissionCheck.allowed) {
+        return callback({
+          status: Consts.unAuthorized,
+          message: "Only Director Legal can submit a preliminary report"
+        });
+      }
       // 2️⃣ Validate input
       if (Utils.isEmpty(body.recordID)) {
         return callback({
@@ -1374,102 +1603,6 @@ static exportReports(param, callback) {
         status: Consts.httpCodeServerError,
         message: "Failed to process case decision",
         error: err.message || err
-      });
-    }
-  }
-
-  static async create(body, authUser, callback) {
-    try {
-      // 1️⃣ Validate inputs
-      if (!authUser || !authUser.userID) throw new Error("Unauthorized: Missing user context");
-
-      const requiredFields = [
-        "officerName",
-        "designation",
-        "natureOfCharges",
-        "panel",
-        "pjNumber",
-        "dateEscalated",
-        "caseAgainst",
-        "assignedTo"
-      ];
-      for (const field of requiredFields) {
-        if (Utils.isEmpty(body[field])) throw new Error(`${field} is required`);
-      }
-
-      if (!["Judicial Officer", "Judicial Staff"].includes(body.caseAgainst)) {
-        throw new Error("caseAgainst must be either 'Judicial Officer' or 'Judicial Staff'");
-      }
-
-      const dateEscalated = new Date(body.dateEscalated);
-      if (Number.isNaN(dateEscalated.getTime())) throw new Error("dateEscalated must be a valid date");
-
-      // 2️⃣ Generate unique file number
-      const dateFiled = new Date();
-      const year = dateFiled.getFullYear();
-      const prefix = body.caseAgainst === "Judicial Staff" ? "JS" : "JO";
-
-      const lastRecord = await DatabaseManager.disciplinaryRecord.findOne({
-        where: {
-          caseAgainst: body.caseAgainst,
-          dateFiled: DatabaseManager.sequelize.where(
-            DatabaseManager.sequelize.fn("YEAR", DatabaseManager.sequelize.col("dateFiled")),
-            year
-          )
-        },
-        order: [["createdAt", "DESC"]],
-      });
-
-      let newFileNo = "001";
-      if (lastRecord && lastRecord.fileNumber) {
-        const parts = lastRecord.fileNumber.split("/");
-        const lastNo = parseInt(parts[4], 10);
-        newFileNo = String(lastNo + 1).padStart(3, "0");
-      }
-
-      const fileNumber = `JSC/ESC/${prefix}/${body.pjNumber}/${newFileNo}/${year}`;
-
-      // Ensure uniqueness
-      const existing = await DatabaseManager.disciplinaryRecord.findOne({ where: { fileNumber } });
-      if (existing) throw new Error(`File number ${fileNumber} already exists`);
-
-      // 3️⃣ Create disciplinary record
-      const record = await DatabaseManager.disciplinaryRecord.create({
-        officerName: body.officerName,
-        designation: body.designation,
-        dateFiled,
-        natureOfCharges: body.natureOfCharges,
-        panel: body.panel,
-        status: Utils.isEmpty(body.status) ? undefined : body.status,
-        pjNumber: body.pjNumber,
-        dateEscalated,
-        caseAgainst: body.caseAgainst,
-        assignedTo: body.assignedTo,
-        fileNumber,
-      });
-
-      // 4️⃣ Record audit trail in DisciplinaryHistory
-      await DatabaseManager.disciplinaryHistory.create({
-        recordID: record.recordID,
-        action: "CREATE",
-        performedBy: authUser.userID,
-        previousValue: null,
-        newValue: record.toJSON(), // store full created record
-      });
-
-      // 5️⃣ Return success
-      callback({
-        status: Consts.httpCodeSuccess,
-        message: "Disciplinary record created successfully",
-        record,
-      });
-
-    } catch (err) {
-      console.error("Disciplinary record creation error:", err);
-      callback({
-        status: Consts.httpCodeServerError,
-        message: "Failed to create disciplinary record",
-        error: err.message || err,
       });
     }
   }

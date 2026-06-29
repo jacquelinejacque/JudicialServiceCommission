@@ -42,10 +42,7 @@ export default {
           headers: {
             'access-token': localStorage.getItem('accessToken')
           },
-          dataSrc: function (json) {
-            console.log('HelpDesk list response:', json)
-            return json?.tickets || []
-          },
+          dataSrc: 'tickets',
           error: function (xhr) {
             console.log('Error loading tickets:', xhr?.responseText || xhr)
           }
@@ -116,14 +113,30 @@ export default {
   },
 
   computed: {
+    isJSCAdmin() {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+      const team = user?.team || ''
+
+      return roleName.toLowerCase() === 'admin' && team.toLowerCase() === 'jsc'
+    },
     isAdmin() {
-      return this.currentUser?.role === 'admin'
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+
+      return roleName.toLowerCase() === 'admin'
     },
     isAgent() {
-      return this.currentUser?.role === 'agent'
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+
+      return roleName.toLowerCase() === 'agent'
     },
     isNormalUser() {
-      return this.currentUser?.role === 'normalUser'
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const roleName = user?.role?.roleName || user?.roleName || ''
+
+      return roleName.toLowerCase() === 'normaluser'
     }
   },
 
@@ -155,7 +168,9 @@ export default {
     isOpenTicket(ticket) {
       return ticket?.status === 'open'
     },
-
+    isResolvableTicket(ticket) {
+      return ['open', 'escalated'].includes(ticket?.status)
+    },
     isResolvedTicket(ticket) {
       return ticket?.status === 'resolved'
     },
@@ -165,28 +180,31 @@ export default {
     },
 
     canAssignTicket(ticket) {
-      return this.isAdmin && this.isNewTicket(ticket)
+      return this.isJSCAdmin && this.isNewTicket(ticket)
     },
 
     canReassignTicket(ticket) {
-      return this.isAdmin && this.isOpenTicket(ticket)
+      return this.isJSCAdmin && this.isOpenTicket(ticket)
     },
 
     canEscalateTicket(ticket) {
-      return this.isAdmin && this.isOpenTicket(ticket)
+      return this.isJSCAdmin && this.isOpenTicket(ticket)
     },
 
     canAddNotes(ticket) {
-      return (this.isAdmin || this.isAssignedAgent(ticket)) && this.isOpenTicket(ticket)
+      return (this.isJSCAdmin || this.isAssignedAgent(ticket)) && this.isOpenTicket(ticket)
     },
 
     canResolveTicket(ticket) {
-      return (this.isAdmin || this.isAssignedAgent(ticket)) && this.isOpenTicket(ticket)
+      return (
+        (this.isJSCAdmin || this.isAssignedAgent(ticket)) &&
+        this.isResolvableTicket(ticket)
+      )
     },
 
     canCloseTicket(ticket) {
-      return this.isAdmin && this.isResolvedTicket(ticket)
-    }, 
+      return this.isJSCAdmin && this.isResolvedTicket(ticket)
+    },
 
     reloadTickets() {
       if (this.$refs.table && this.$refs.table.dt) {
@@ -312,7 +330,7 @@ export default {
         <div>
           <h5 class="card-title mb-0">ICT Help Desk Requests</h5>
           <small class="text-muted">
-            Admins see all tickets. Other users see tickets they created or tickets assigned to them.
+            JSC admins see all tickets. Agents see tickets they created or assigned tickets. Normal users see their own tickets.
           </small>
         </div>
 

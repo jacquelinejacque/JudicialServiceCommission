@@ -65,7 +65,7 @@ class TicketNoteLogic {
 
         // 3) Permission check: only admin or assigned agent
         function (ticket, done) {
-            const isAdmin = authUser.role === "admin";
+            const isAdmin = authUser?.role?.roleName?.toLowerCase() === "admin";
             const isAssignedAgent = ticket.assignedTo === authUser.userID;
 
             if (!isAdmin && !isAssignedAgent) {
@@ -268,13 +268,13 @@ class TicketNoteLogic {
                                 {
                                     model: DatabaseManager.user,
                                     as: "requester",
-                                    attributes: ["userID", "name", "email", "phone", "role"],
+                                    attributes: ["userID", "name", "email", "phone", "roleID"],
                                     required: false,
                                 },
                                 {
                                     model: DatabaseManager.user,
                                     as: "agent",
-                                    attributes: ["userID", "name", "email", "phone", "role"],
+                                    attributes: ["userID", "name", "email", "phone", "roleID"],
                                     required: false,
                                 },
                             ],
@@ -300,18 +300,23 @@ class TicketNoteLogic {
 
                 // 3) Check access permissions
                 function (ticket, done) {
-                    const isAdmin = authUser.role === "admin";
-                    const isOwner = ticket.userID === authUser.userID;
-                    const isAssignedAgent = ticket.assignedTo === authUser.userID;
+                const roleName =
+                    authUser?.role?.roleName ||
+                    authUser?.roleName ||
+                    "";
 
-                    if (!isAdmin && !isOwner && !isAssignedAgent) {
-                        return done({
-                            message: "Forbidden",
-                            status: Consts.httpCodeForbidden,
-                        });
-                    }
+                const isAdmin = roleName.toLowerCase() === "admin";
+                const isOwner = ticket.userID === authUser.userID;
+                const isAssignedAgent = ticket.assignedTo === authUser.userID;
 
-                    done(null, ticket);
+                if (!isAdmin && !isOwner && !isAssignedAgent) {
+                    return done({
+                    message: "Forbidden",
+                    status: Consts.httpCodeForbidden,
+                    });
+                }
+
+                done(null, ticket);
                 },
 
                 // 4) Fetch notes
@@ -323,7 +328,7 @@ class TicketNoteLogic {
                                 {
                                     model: DatabaseManager.user,
                                     as: "author",
-                                    attributes: ["userID", "name", "email", "role"],
+                                    attributes: ["userID", "name", "email", "phone", "roleID"],
                                     required: false,
                                 },
                             ],

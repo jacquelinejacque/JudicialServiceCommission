@@ -106,7 +106,6 @@ export default {
 
   mounted() {
     console.log('Current user from localStorage:', this.currentUser)
-    console.log('Is registrar:', this.isRegistrar)
     this.dt = this.$refs.table.dt
     this.fetchLegalTeamUsers()
   },
@@ -116,21 +115,35 @@ export default {
         ? this.selectedAction.replaceAll('_', ' ')
         : ''
     },
-    isRegistrar() {
-      return this.currentUser?.role?.toLowerCase() === 'registrar'
-    },
-    isDirectorLegal() {
-      return this.currentUser?.role?.toLowerCase() === 'directorlegal'
-    },
-    isLegalTeam() {
-      return this.currentUser?.role?.toLowerCase() === 'legalteam'
-    }
+
+    permissions() {
+      return this.currentUser?.permissions || []
+    }, 
+
   },
   methods: {
+    can(permission) {
+      return this.permissions.includes(permission)
+    },
+
     applyFilters() {
       if (this.$refs.table && this.$refs.table.dt) {
         this.$refs.table.dt.ajax.reload(null, true)
       }
+    },
+    canProcessCase(record) {
+      if (!record || record.stage !== 'CASE') return false
+
+      const isAssignedLegalTeamMember =
+        this.can('disciplinaryRecords.processCase') &&
+        record.status === 'Assigned' &&
+        record.assignedTo === this.currentUser.userID
+
+      const isDirectorLegalProcessing =
+        this.can('disciplinaryRecords.directorProcessCase') &&
+        record.status === 'Registered'
+
+      return isAssignedLegalTeamMember || isDirectorLegalProcessing
     },
     handleDateRangeChange() {
       // Reset custom dates when switching presets
@@ -185,7 +198,7 @@ export default {
 
           const res = await axios.get(`${Const.BASE_URL}/users/list`, {
           params: {
-              role: 'legalTeam',
+              roleName: 'legalTeam',
           },
           headers: {
               'access-token': localStorage.getItem('accessToken')
@@ -296,11 +309,15 @@ export default {
       }).showToast()
     },
     editRecord(record) {
+      if (!this.can('disciplinaryRecords.update')) {
+        this.showToast('You do not have permission to edit records', true)
+        return
+      }
+
       this.selectedRecord = {
         ...record,
         recordID: record.recordID || record.recordId
       }
-      console.log(this.selectedRecord)
     },
 
     setRecordId(recordId) {
@@ -435,6 +452,10 @@ export default {
 
         if (this.selectedAction === 'REGISTER_CASE') {
           payloadToSend.note = 'Case registered'
+        }
+
+        if (this.selectedAction === 'ASSIGN_LEGALTEAM') {
+          payloadToSend.note = 'case assigned to legal team member'
         }
 
         if (this.selectedAction === 'PROCESS_CASE') {
@@ -653,7 +674,12 @@ export default {
           <small class="text-muted">Manage Records, roles and status</small>
         </div>
 
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newReportModal">
+        <button
+          v-if="can('disciplinaryRecords.create')"
+          class="btn btn-primary"
+          data-bs-toggle="modal"
+          data-bs-target="#newReportModal"
+        >
           New Report
         </button>
       </div>
@@ -881,7 +907,7 @@ export default {
                 </a>
               </li>
               <!-- Edit -->
-              <li v-if="props.rowData.status === 'Received'" >
+              <li v-if="can('disciplinaryRecords.update') && props.rowData.status === 'Received'">
                 <a  
                   href="#"
                   class="dropdown-item"
@@ -920,16 +946,16 @@ export default {
                   Download Board Brief File
                 </a>
               </li>                       
-              <li v-if="isRegistrar && props.rowData.status === 'Received'">
+              <li v-if="can('disciplinaryRecords.assignToHRM') && props.rowData.status === 'Received'">
                 <a
                   href="#"
                   class="dropdown-item"
                   @click.prevent="openActionModal(props.rowData, 'ASSIGN_REPORT')"
                 >
-                  Assign Report
+                  Assign To HRM 
                 </a>
               </li>
-              <li v-if="isDirectorLegal && props.rowData.status === 'Under_review'">
+              <li v-if="can('disciplinaryRecords.registerCase') && props.rowData.status === 'Under_review'">
                 <a
                   href="#"
                   class="dropdown-item"
@@ -938,9 +964,19 @@ export default {
                   Register Case
                 </a>
               </li>
-              <li v-if="isLegalTeam 
+
+              <li v-if="can('disciplinaryRecords.assignLegalTeam')
                         && props.rowData.stage === 'CASE' 
                         && props.rowData.status === 'Registered'">
+                <a
+                  href="#"
+                  class="dropdown-item"
+                  @click.prevent="openActionModal(props.rowData, 'ASSIGN_LEGALTEAM')"
+                >
+                  Assign To Legal Team
+                </a>
+              </li>              
+              <li v-if="canProcessCase(props.rowData)">
                 <a
                   href="#"
                   class="dropdown-item"
@@ -949,7 +985,8 @@ export default {
                   Process Case
                 </a>
               </li>
-              <li v-if="props.rowData.stage === 'CASE' 
+              <li v-if="can('disciplinaryRecords.preliminaryReview')
+                        && props.rowData.stage === 'CASE' 
                         && props.rowData.status === 'Processed'">
                 <a
                   href="#"

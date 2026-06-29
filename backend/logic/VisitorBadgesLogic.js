@@ -12,6 +12,15 @@ class VisitorBadgesLogic {
                         return done("Authenticated user is required");
                     }
 
+                    const roleName =
+                        loggedInUser?.role?.roleName ||
+                        loggedInUser?.roleName ||
+                        "";
+
+                    if (roleName.toLowerCase() !== "admin") {
+                        return done("Only admins can create visitor badges");
+                    }
+
                     if (Utils.isEmpty(body.badgeNumber)) {
                         return done("Badge number is required");
                     }
@@ -38,10 +47,6 @@ class VisitorBadgesLogic {
                         })
                         .then((user) => {
                             if (!user) return done("Logged in user not found");
-
-                            if (user.role !== "admin") {
-                                return done("Only admins can create visitor badges");
-                            }
 
                             return done(null, user);
                         })
@@ -129,6 +134,15 @@ class VisitorBadgesLogic {
                         return done("Authenticated user is required");
                     }
 
+                    const roleName =
+                        loggedInUser?.role?.roleName ||
+                        loggedInUser?.roleName ||
+                        "";
+
+                    if (roleName.toLowerCase() !== "admin") {
+                        return done("Only admins can create visitor badges");
+                    }
+
                     if (Utils.isEmpty(body.receptionDeskID)) {
                         return done("Reception desk is required");
                     }
@@ -154,10 +168,6 @@ class VisitorBadgesLogic {
                         })
                         .then((user) => {
                             if (!user) return done("Logged in user not found");
-
-                            if (user.role !== "admin") {
-                                return done("Only admins can create visitor badges");
-                            }
 
                             return done(null, user);
                         })
@@ -198,6 +208,7 @@ class VisitorBadgesLogic {
                             if (lastBadge && lastBadge.length > 0) {
                                 const badgeNumber = lastBadge[0].badgeNumber;
                                 const numericPart = parseInt((badgeNumber || "").replace("V-", ""));
+
                                 if (!isNaN(numericPart)) {
                                     startNumber = numericPart + 1;
                                 }
@@ -216,6 +227,7 @@ class VisitorBadgesLogic {
 
                     for (let i = 0; i < quantity; i++) {
                         const number = startNumber + i;
+
                         badges.push({
                             badgeNumber: `V-${String(number).padStart(3, "0")}`,
                             receptionDeskID: receptionDesk.receptionDeskID,
